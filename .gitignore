@@ -1,0 +1,33 @@
+# 대용량 데이터 폴더 (로컬에만 유지)
+data/
+raw_data/
+eval_data/
+files/
+
+# 캐시 파일
+bm25_cache.pkl
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# 환경 변수 (API 키 보안)
+.env
+
+# Node.js
+node_modules/
+
+# 임시/백업 파일
+*.log
+*.tmp
+*.bak
+
+# 엑셀 파일 (WBS 등 관리용)
+*.xlsx
+
+# OS 파일
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
