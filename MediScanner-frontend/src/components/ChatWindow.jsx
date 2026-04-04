@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import MessageBubble from './MessageBubble'
 
-export default function ChatWindow({ apiUrl, sessionId, messages, setMessages, initialized, setInitialized, answerMode, setAnswerMode }) {
+export default function ChatWindow({ apiUrl, sessionId, messages, setMessages, initialized, setInitialized, answerMode, setAnswerMode, selectedModel, setSelectedModel }) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [speakingIdx, setSpeakingIdx] = useState(null)
@@ -150,7 +150,7 @@ export default function ChatWindow({ apiUrl, sessionId, messages, setMessages, i
       const res = await fetch(`${apiUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: userMsg, answer_mode: answerMode, user_id: sessionId }),
+        body: JSON.stringify({ query: userMsg, answer_mode: answerMode, user_id: sessionId, ...(selectedModel && { model: selectedModel }) }),
       })
       if (!res.ok) throw new Error('서버 오류')
       const data = await res.json()
@@ -177,14 +177,14 @@ export default function ChatWindow({ apiUrl, sessionId, messages, setMessages, i
     <div className="flex flex-col h-full">
 
       {/* 메시지 영역 */}
-      <div className="flex-1 overflow-y-auto px-4 py-4" style={{ background: 'linear-gradient(180deg, #FFFDF5, #FFF9EA)' }}>
+      <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4" style={{ background: 'linear-gradient(180deg, #FFFDF5, #FFF9EA)' }}>
         {messages.map((msg, i) => (
           <div key={i}>
             {msg.isLoading ? (
               <div className="flex gap-2 mb-4">
                 <div className="shrink-0 flex items-center justify-center"
-                  style={{ width: 34, height: 34, background: 'linear-gradient(145deg, #FFD700, #B8860B)', borderRadius: '50%', fontSize: 16 }}>
-                  🏥
+                  style={{ width: 34, height: 34, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+                  <img src="/logo.png" alt="메디스캐너" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
                 <div style={{ background: 'white', border: '1px solid #E8DCC0', borderRadius: '18px 18px 18px 4px', padding: '13px 16px' }}>
                   <div className="flex items-center gap-2">

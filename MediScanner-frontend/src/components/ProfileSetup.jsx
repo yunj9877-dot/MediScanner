@@ -14,7 +14,11 @@ export default function ProfileSetup({ apiUrl, sessionId, onComplete, onSkip, on
   const [saving, setSaving] = useState(false)
   const [fadeOut, setFadeOut] = useState(false)
   const [ocrLoading, setOcrLoading] = useState(false)
+  const [submitActive, setSubmitActive] = useState(false)
+  const [skipActive, setSkipActive] = useState(false)
+  const [isListening, setIsListening] = useState(false)
   const fileInputRef = useRef(null)
+  const recognitionRef = useRef(null)
 
   const toggleDisease = (disease) => {
     setSelectedDiseases(prev =>
@@ -31,6 +35,29 @@ export default function ProfileSetup({ apiUrl, sessionId, onComplete, onSkip, on
     setShowCustomInput(false)
   }
 
+  const handleVoiceMed = () => {
+    if (isListening) {
+      recognitionRef.current?.stop()
+      setIsListening(false)
+      return
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) { alert('이 브라우저는 음성 인식을 지원하지 않습니다.'); return }
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'ko-KR'
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.onstart = () => setIsListening(true)
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript.replace(/[.。]/g, '').trim()
+      setMedications(prev => prev ? `${prev}, ${transcript}` : transcript)
+    }
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+    recognitionRef.current = recognition
+    recognition.start()
+  }
+
   const handleMedOCR = (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -40,15 +67,15 @@ export default function ProfileSetup({ apiUrl, sessionId, onComplete, onSkip, on
     reader.onload = async (ev) => {
       const base64 = ev.target.result.split(',')[1]
       try {
-        const res = await fetch(`${apiUrl}/api/camera/medications`, {
+        const res = await fetch(`${apiUrl}/api/camera/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image_base64: base64 }),
+          body: JSON.stringify({ image_base64: base64, user_id: 'default' }),
         })
         const data = await res.json()
-        if (data.medications) {
+        if (data.drug_names && data.drug_names.length > 0) {
           const existing = medications.trim()
-          const newMeds = existing ? `${existing}, ${data.medications}` : data.medications
+          const newMeds = existing ? `${existing}, ${data.drug_names.join(', ')}` : data.drug_names.join(', ')
           setMedications(newMeds)
         }
       } catch (err) {
@@ -143,10 +170,10 @@ export default function ProfileSetup({ apiUrl, sessionId, onComplete, onSkip, on
                   className="px-2.5 py-1 rounded-full font-medium"
                   style={{
                     fontSize: 12,
-                    background: selectedDiseases.includes(disease) ? 'linear-gradient(135deg, #FFD700, #DAA520)' : '#FFF8E0',
-                    color: selectedDiseases.includes(disease) ? '#1A1206' : '#8B7A50',
-                    border: selectedDiseases.includes(disease) ? '1px solid #DAA520' : '1px solid #E0D0A0',
-                    boxShadow: selectedDiseases.includes(disease) ? '0 1px 4px rgba(218,165,32,0.3)' : 'none',
+                    background: selectedDiseases.includes(disease) ? 'linear-gradient(135deg, #C96010, #A04000)' : '#FFF8E0',
+                    color: selectedDiseases.includes(disease) ? '#FFFFFF' : '#8B7A50',
+                    border: selectedDiseases.includes(disease) ? '1px solid #A04000' : '1px solid #E0D0A0',
+                    boxShadow: selectedDiseases.includes(disease) ? '0 1px 4px rgba(160,64,0,0.3)' : 'none',
                   }}>
                   {selectedDiseases.includes(disease) ? '✓ ' : ''}{disease}
                 </button>
@@ -154,7 +181,7 @@ export default function ProfileSetup({ apiUrl, sessionId, onComplete, onSkip, on
               {customDiseases.map(disease => (
                 <button key={disease} onClick={() => toggleDisease(disease)}
                   className="px-2.5 py-1 rounded-full font-medium"
-                  style={{ fontSize: 12, background: 'linear-gradient(135deg, #FFD700, #DAA520)', color: '#1A1206', border: '1px solid #DAA520' }}>
+                  style={{ fontSize: 12, background: 'linear-gradient(135deg, #C96010, #A04000)', color: '#FFFFFF', border: '1px solid #A04000' }}>
                   ✓ {disease}
                 </button>
               ))}
@@ -195,22 +222,61 @@ export default function ProfileSetup({ apiUrl, sessionId, onComplete, onSkip, on
               <button onClick={() => fileInputRef.current?.click()} disabled={ocrLoading}
                 className="shrink-0 flex items-center justify-center rounded-lg"
                 style={{ width: 40, height: 40, background: ocrLoading ? '#E0D0A0' : 'linear-gradient(135deg, #FFD700, #DAA520)', border: '1px solid #DAA520', cursor: ocrLoading ? 'wait' : 'pointer' }}>
-                {ocrLoading ? <span style={{ fontSize: 13 }}>⏳</span> : <span style={{ fontSize: 18 }}>📷</span>}
+                {ocrLoading ? (
+                  <div style={{
+                    width: 20, height: 20,
+                    border: '2.5px solid rgba(90,62,0,0.2)',
+                    borderTop: '2.5px solid #5A3E00',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                  }} />
+                ) : <span style={{ fontSize: 18 }}>📷</span>}
               </button>
+              <button onClick={handleVoiceMed}
+                className="shrink-0 flex items-center justify-center rounded-lg"
+                style={{ width: 40, height: 40, border: '1px solid #DAA520',
+                  background: isListening ? 'linear-gradient(135deg, #FF6B6B, #CC2222)' : 'linear-gradient(135deg, #FFD700, #DAA520)' }}>
+                <span style={{ fontSize: 18 }}>{isListening ? '⏹' : '🎤'}</span>
+              </button>
+              <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
             </div>
+            {isListening && (
+              <p style={{ fontSize: 11, color: '#CC2222', fontWeight: 600, marginTop: 4 }}>🎤 듣는 중... 약 이름을 말해주세요</p>
+            )}
             <p className="mt-1" style={{ fontSize: 11, color: '#6B4D10', fontWeight: 600 }}>
               처방전이나 약봉투를 촬영하면 자동으로 약 이름을 인식합니다
             </p>
           </div>
         </div>
 
-        <button onClick={handleSubmit} disabled={saving}
+        <button
+          onMouseDown={() => setSubmitActive(true)}
+          onMouseUp={() => setSubmitActive(false)}
+          onMouseLeave={() => setSubmitActive(false)}
+          onTouchStart={() => setSubmitActive(true)}
+          onTouchEnd={() => setSubmitActive(false)}
+          onClick={handleSubmit} disabled={saving}
           className="mt-6 w-full py-3 rounded-full font-bold"
-          style={{ fontSize: 15, background: 'linear-gradient(135deg, #FFD700, #DAA520, #B8860B)', color: '#1A1206', boxShadow: '0 4px 16px rgba(218,165,32,0.3)', border: '1px solid rgba(255,223,0,0.3)', letterSpacing: 1, opacity: saving ? 0.6 : 1 }}>
+          style={{ fontSize: 15, letterSpacing: 1, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.6 : 1, transition: 'background 0.1s, color 0.1s',
+            background: submitActive ? 'linear-gradient(135deg, #FFD700, #DAA520, #B8860B)' : '#FFF8E0',
+            color: submitActive ? '#1A1206' : '#8B6914',
+            border: submitActive ? '1px solid #DAA520' : '1.5px solid #E0D0A0',
+          }}>
           {saving ? '저장 중...' : '등록하고 시작하기'}
         </button>
-        <button onClick={handleSkip} className="mt-2 w-full py-3 rounded-full font-bold"
-          style={{ fontSize: 15, background: '#FFF8E0', color: '#8B6914', border: '1.5px solid #E0D0A0', cursor: 'pointer', letterSpacing: 1 }}>
+        <button
+          onMouseDown={() => setSkipActive(true)}
+          onMouseUp={() => setSkipActive(false)}
+          onMouseLeave={() => setSkipActive(false)}
+          onTouchStart={() => setSkipActive(true)}
+          onTouchEnd={() => setSkipActive(false)}
+          onClick={handleSkip}
+          className="mt-2 w-full py-3 rounded-full font-bold"
+          style={{ fontSize: 15, letterSpacing: 1, cursor: 'pointer', transition: 'background 0.1s, color 0.1s',
+            background: skipActive ? 'linear-gradient(135deg, #FFD700, #DAA520, #B8860B)' : '#FFF8E0',
+            color: skipActive ? '#1A1206' : '#8B6914',
+            border: skipActive ? '1px solid #DAA520' : '1.5px solid #E0D0A0',
+          }}>
           맞춤 정보 불필요 (일반 상담)
         </button>
 

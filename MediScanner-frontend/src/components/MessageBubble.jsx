@@ -55,16 +55,18 @@ export default function MessageBubble({ message }) {
     <div className="flex gap-2 mb-4">
       {/* AI 아바타 */}
       <div
-        className="shrink-0 flex items-center justify-center text-sm"
+        className="shrink-0 flex items-center justify-center"
         style={{
-          width: 34,
-          height: 34,
-          background: 'linear-gradient(145deg, #FFD700, #B8860B)',
+          width: 36,
+          height: 36,
           borderRadius: '50%',
-          boxShadow: '0 2px 8px rgba(218,165,32,0.3)',
+          background: 'linear-gradient(145deg, #FFD700, #B8860B)',
+          overflow: 'hidden',
+          flexShrink: 0,
+          marginLeft: -6,
         }}
       >
-        🏥
+        <img src="/logo.png" alt="메디스캐너" style={{ width: 36, height: 36, objectFit: 'contain' }} />
       </div>
 
       {/* 답변 말풍선 */}
@@ -79,15 +81,41 @@ export default function MessageBubble({ message }) {
         }}
       >
         {/* 답변 텍스트 */}
-        <p style={{ fontSize: 15, color: '#2A1D08', fontWeight: 500, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+        <div style={{ fontSize: 15, color: '#2A1D08', fontWeight: 500, lineHeight: 1.7 }}>
           {message.text
             ? message.text
                 .replace(/\n*([①②③④⑤⑥⑦⑧])/g, '\n$1')
-                .replace(/\n*(💊)/g, '\n$1')
-                .replace(/\n{2,}/g, '\n')
-                .replace(/^\n/, '')
+                .replace(/\n*(💊)/g, '\n\n$1')
+                .replace(/\n*(●\s)/g, '\n● ')
+                .replace(/\n{3,}/g, '\n\n')
+                .replace(/^\n+/, '')
+                .split('\n')
+                .map((line, i) => {
+                  const DANGER_KEYWORDS = /병용금기|복용금지|즉시 병원|즉시 내원|혈당 상승|혈압 상승|⚠️|❌/
+                  const isDanger = DANGER_KEYWORDS.test(line)
+                  // **텍스트** 파란색 처리
+                  const parts = line.split(/(\*\*[^*]+\*\*)/)
+                  return (
+                    <p key={i} style={{
+                      margin: '2px 0',
+                      color: isDanger ? '#CC2200' : '#2A1D08',
+                      fontWeight: isDanger ? 700 : 500,
+                      background: isDanger ? 'rgba(204,34,0,0.05)' : 'transparent',
+                      borderLeft: isDanger ? '3px solid #CC2200' : 'none',
+                      paddingLeft: isDanger ? 8 : 0,
+                      borderRadius: isDanger ? 4 : 0,
+                      whiteSpace: 'pre-wrap',
+                    }}>
+                      {parts.map((part, j) =>
+                        part.startsWith('**') && part.endsWith('**')
+                          ? <span key={j} style={{ color: '#CC0000', fontWeight: 700 }}>{part.slice(2, -2)}</span>
+                          : part
+                      )}
+                    </p>
+                  )
+                })
             : ''}
-        </p>
+        </div>
 
         {/* 등록된 기저질환 */}
         {message.profileDiseases && (

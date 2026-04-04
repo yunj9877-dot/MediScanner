@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>10. MediScanner 아키텍처 v4</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:     #F4F6F9;
+    --bg2:    #FFFFFF;
+    --panel:  #FFFFFF;
+    --border: #D8DEE8;
+    --teal:   #009E84;
+    --tealBg: #E8F8F4;
+    --blue:   #2D7DD2;
+    --blueBg: #EBF3FD;
+    --orange: #C96010;
+    --orangeBg: #FEF3EA;
+    --red:    #C53030;
+    --redBg:  #FEF0F0;
+    --green:  #1A8A4A;
+    --greenBg:#EDFAF3;
+    --yellow: #9B6E00;
+    --yellowBg:#FFF8E1;
+    --purple: #6B3FBF;
+    --purpleBg:#F3EEFF;
+    --text:   #1A2233;
+    --text2:  #4A5568;
+    --white:  #FFFFFF;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Noto Sans KR', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; font-size: 14px; }
+
+  /* ── HEADER ── */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 32px 12px;
+    border-bottom: 2px solid var(--teal);
+    background: var(--white);
+    position: sticky; top: 0; z-index: 100;
+    gap: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  }
+  .slide-meta { flex-shrink: 0; }
+  .slide-num { font-family: var(--mono); font-size: 11px; color: var(--teal); letter-spacing: 3px; margin-bottom: 2px; font-weight: 600; }
+  .slide-title { font-size: 19px; font-weight: 700; color: var(--text); }
+  .slide-title span { color: var(--teal); }
+
+  /* 변경사항 배지 */
+  .change-badge {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--orangeBg); border: 1px solid #E8A070;
+    border-radius: 6px; padding: 7px 14px;
+    font-family: var(--mono); font-size: 11px; color: var(--orange);
+    flex-shrink: 0; font-weight: 600;
+  }
+  .change-badge::before { content: '◆'; font-size: 11px; }
+
+  .tabs { display: flex; gap: 5px; flex-wrap: wrap; }
+  .tab {
+    font-family: var(--mono); font-size: 11px; padding: 6px 15px;
+    border-radius: 4px; cursor: pointer; border: 1.5px solid var(--border);
+    color: var(--text2); background: var(--white); transition: all .2s; font-weight: 500;
+  }
+  .tab:hover { border-color: var(--teal); color: var(--teal); background: var(--tealBg); }
+  .tab.active { background: var(--teal); color: #fff; border-color: var(--teal); font-weight: 700; }
+  .tab.wip { border-color: #D4A800; color: var(--yellow); background: var(--yellowBg); }
+  .tab.wip.active { background: #C49000; color: #fff; border-color: #C49000; }
+
+  /* ── CONTENT ── */
+  .content { display: none; padding: 24px 32px 40px; animation: fadeIn .2s ease; }
+  .content.active { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── SECTION LABEL ── */
+  .sec-label {
+    font-family: var(--mono); font-size: 11px; color: var(--teal);
+    letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px; font-weight: 700;
+  }
+  .sec-label::after { content:''; flex:1; height:2px; background:var(--teal); opacity:.2; }
+  .sec-label.orange { color: var(--orange); }
+
+  /* ── GRID ── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--panel); border: 1.5px solid var(--border);
+    border-radius: 10px; padding: 18px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  }
+  .card.teal-glow { border-color: var(--teal); background: var(--tealBg); }
+  .card-title {
+    font-size: 13px; font-weight: 700; color: var(--text);
+    margin-bottom: 11px; display: flex; align-items: center; gap: 7px;
+  }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--teal); flex-shrink:0; }
+  .dot.red { background:var(--red); }
+  .dot.blue { background:var(--blue); }
+  .dot.orange { background:var(--orange); }
+  .dot.purple { background:var(--purple); }
+  .dot.yellow { background:#C49000; }
+  .card p { font-size: 13px; color: var(--text2); line-height: 1.75; }
+  code { font-family:var(--mono); font-size:11.5px; color:var(--teal); background:var(--tealBg); padding:2px 6px; border-radius:4px; font-weight:600; border:1px solid rgba(0,158,132,.2); }
+
+  /* ── TABLE ── */
+  .tbl { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:14px; }
+  .tbl th {
+    background:#F0F4F8; border:1px solid var(--border); padding:10px 14px;
+    font-family:var(--mono); font-size:11px; color:var(--text); letter-spacing:.5px;
+    text-align:left; font-weight:700;
+  }
+  .tbl td { border:1px solid var(--border); padding:9px 14px; color:var(--text); vertical-align:middle; line-height:1.55; background:var(--white); }
+  .tbl tr:nth-child(even) td { background:#F8FAFC; }
+  .tbl tr.win td { background:var(--tealBg); }
+  .tbl tr.win td:first-child { border-left:4px solid var(--teal); }
+  .tbl tr.wip td { background:var(--yellowBg); }
+  .tbl tr.wip td:first-child { border-left:4px solid #C49000; }
+
+  /* ── TAG ── */
+  .tag {
+    display:inline-block; font-family:var(--mono); font-size:10px;
+    padding:3px 8px; border-radius:4px; font-weight:700; letter-spacing:.3px;
+  }
+  .tag.teal { background:var(--tealBg); color:var(--teal); border:1.5px solid rgba(0,158,132,.3); }
+  .tag.red { background:var(--redBg); color:var(--red); border:1.5px solid rgba(197,48,48,.25); }
+  .tag.yellow { background:var(--yellowBg); color:var(--yellow); border:1.5px solid rgba(155,110,0,.25); }
+  .tag.blue { background:var(--blueBg); color:var(--blue); border:1.5px solid rgba(45,125,210,.25); }
+  .tag.orange { background:var(--orangeBg); color:var(--orange); border:1.5px solid rgba(201,96,16,.25); }
+  .tag.purple { background:var(--purpleBg); color:var(--purple); border:1.5px solid rgba(107,63,191,.25); }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow { display:flex; align-items:stretch; gap:0; margin-bottom:22px; overflow-x:auto; }
+  .flow-node {
+    flex:1; min-width:110px; background:var(--white); border:1.5px solid var(--border);
+    border-radius:8px; padding:16px 12px; text-align:center;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  }
+  .flow-node .icon { font-size:22px; margin-bottom:6px; display:block; }
+  .flow-node .ntitle { font-size:13px; font-weight:700; color:var(--text); margin-bottom:5px; }
+  .flow-node .ndetail { font-family:var(--mono); font-size:10px; color:var(--text2); line-height:1.7; }
+  .flow-node.hl { border-color:var(--teal); border-width:2px; background:var(--tealBg); }
+  .flow-node.hl .ntitle { color:var(--teal); }
+  .flow-node.hl2 { border-color:var(--blue); border-width:2px; background:var(--blueBg); }
+  .flow-node.hl2 .ntitle { color:var(--blue); }
+  .flow-arrow { display:flex; align-items:center; padding:0 6px; color:var(--teal); font-size:18px; flex-shrink:0; font-weight:700; }
+
+  /* ── PIPELINE ── */
+  .pipeline { background:var(--white); border:1.5px solid var(--border); border-radius:10px; padding:20px 24px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+  .pipe-title { font-family:var(--mono); font-size:11px; color:var(--teal); margin-bottom:14px; letter-spacing:.5px; font-weight:700; }
+  .pipe-row { display:flex; align-items:center; gap:8px; margin-bottom:9px; flex-wrap:wrap; }
+  .pipe-step {
+    background:#F4F6F9; border:1.5px solid var(--border); border-radius:5px;
+    padding:8px 14px; font-size:12.5px; white-space:nowrap; font-weight:600; color:var(--text);
+  }
+  .pipe-step.em { border-color:var(--teal); color:var(--teal); background:var(--tealBg); }
+  .pipe-step.em2 { border-color:var(--blue); color:var(--blue); background:var(--blueBg); }
+  .pipe-step.em3 { border-color:var(--purple); color:var(--purple); background:var(--purpleBg); }
+  .pipe-arrow { color:var(--text2); font-size:14px; flex-shrink:0; font-weight:700; }
+
+  /* ── TRANSITION BOX ── */
+  .trans { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:18px; margin-bottom:18px; }
+  .t-block { background:var(--white); border:1.5px solid var(--border); border-radius:10px; padding:18px 20px; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+  .t-block.after { border-color:var(--teal); border-width:2px; background:var(--tealBg); }
+  .t-head { font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.8px; margin-bottom:13px; padding-bottom:9px; border-bottom:1.5px solid var(--border); }
+  .t-block.after .t-head { color:var(--teal); border-bottom-color:rgba(0,158,132,.25); }
+  .t-block:not(.after) .t-head { color:var(--text2); }
+  .t-row { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; font-size:13px; gap:10px; }
+  .t-row .k { color:var(--text2); font-size:12px; flex-shrink:0; font-weight:500; }
+  .t-row .v { font-family:var(--mono); font-size:12px; color:var(--text); text-align:right; font-weight:600; }
+  .t-row .v.new { color:var(--teal); }
+  .t-arr { font-size:28px; color:var(--teal); text-align:center; flex-direction:column; display:flex; align-items:center; gap:4px; font-weight:700; }
+  .t-arr small { font-family:var(--mono); font-size:10px; color:var(--text2); }
+
+  /* ── MOCK UI ── */
+  .mock-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  .mock-grid-4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; margin-bottom:14px; }
+  .mock { background:var(--white); border:1.5px solid var(--border); border-radius:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+  .mock.best { border-color:var(--teal); border-width:2px; }
+  .mock.wip-border { border-color:#C49000; border-width:2px; }
+  .mock-head {
+    padding:10px 14px; background:#F8FAFC; border-bottom:1.5px solid var(--border);
+    font-family:var(--mono); font-size:11px; color:var(--text2);
+    display:flex; justify-content:space-between; align-items:center; font-weight:600;
+  }
+  .mock-body { padding:14px; }
+  .mock-q {
+    font-size:12px; font-weight:700; color:var(--blue); margin-bottom:10px;
+    padding:8px 11px; background:var(--blueBg); border-radius:5px;
+    border-left:3px solid var(--blue);
+  }
+  .mock-a { font-size:12px; color:var(--text); line-height:1.8; }
+  .mock-a strong { color:var(--text); font-weight:700; }
+  .mock-a .hl { color:var(--teal); font-weight:700; }
+  .mock-a .warn { color:var(--orange); font-weight:600; }
+  .mock-a .err { color:var(--red); font-size:12px; font-weight:600; }
+  .mock-score { margin-top:12px; padding-top:10px; border-top:1.5px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+  .mock-score .lbl { font-family:var(--mono); font-size:10px; color:var(--text2); font-weight:600; }
+  .bar-wrap { flex:1; margin:0 10px; height:7px; background:#E8EDF4; border-radius:4px; overflow:hidden; }
+  .bar { height:100%; border-radius:4px; }
+  .pct { font-family:var(--mono); font-size:11px; font-weight:700; }
+
+  /* ── WIP BANNER ── */
+  .wip-banner {
+    background:var(--yellowBg); border:1.5px solid #D4A800;
+    border-radius:8px; padding:12px 18px; margin-bottom:16px;
+    font-size:13px; color:var(--yellow); display:flex; align-items:center; gap:10px; font-weight:600;
+  }
+  .wip-banner::before { content:'⚠'; font-size:15px; }
+
+  /* ── HIGHLIGHT BOX ── */
+  .hbox {
+    border-radius:8px; padding:14px 18px; font-size:13px; line-height:1.75;
+    margin-bottom:16px;
+  }
+  .hbox.teal { background:var(--tealBg); border:1.5px solid rgba(0,158,132,.3); color:var(--text); }
+  .hbox.orange { background:var(--orangeBg); border:1.5px solid rgba(201,96,16,.25); color:var(--text); }
+  .hbox strong { color:var(--teal); }
+  .hbox.orange strong { color:var(--orange); }
+
+  /* ── LIST ── */
+  .list { list-style:none; }
+  .list li { font-size:13px; color:var(--text2); padding:6px 0; border-bottom:1px solid var(--border); display:flex; gap:9px; align-items:flex-start; line-height:1.65; }
+  .list li:last-child { border:none; }
+  .list li::before { content:'▸'; color:var(--teal); font-size:11px; margin-top:2px; flex-shrink:0; font-weight:700; }
+
+  /* ── FOOTER ── */
+  .footer { font-family:var(--mono); font-size:11px; color:var(--text2); margin-top:10px; padding-top:13px; border-top:1.5px solid var(--border); display:flex; gap:20px; flex-wrap:wrap; font-weight:500; }
+  .footer span { color:var(--teal); font-weight:700; }
+
+  /* ── SENIOR BADGE ── */
+  .senior-principle { display: flex; gap: 12px; margin-bottom: 18px; }
+  .sp-item {
+    flex: 1; background: var(--white); border: 1.5px solid var(--border);
+    border-radius: 8px; padding: 12px 16px; text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  }
+  .sp-item .sp-icon { font-size: 22px; margin-bottom: 5px; }
+  .sp-item .sp-label { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .sp-item .sp-sub { font-family: var(--mono); font-size: 10.5px; color: var(--text2); line-height:1.6; }
+
+  ::-webkit-scrollbar { width:5px; height:5px; }
+  ::-webkit-scrollbar-track { background:var(--bg); }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="slide-meta">
+    <div class="slide-num">SLIDE 10 / MEDISCANNER ARCHITECTURE</div>
+    <div class="slide-title">시스템 <span>아키텍처</span></div>
+  </div>
+  <div class="change-badge">확정: E5-large + BM25 RRF 99.5% | hnswlib 직접 검색 | ChromaDB 0.4.24</div>
+  <div class="tabs">
+    <button class="tab active" onclick="show('flow',this)">전체 흐름도</button>
+    <button class="tab" onclick="show('medrag',this)">MedRAG → ChromaDB</button>
+    <button class="tab" onclick="show('embed',this)">임베딩 비교</button>
+    <button class="tab" onclick="show('rrf',this)">검색·DB 아키텍처</button>
+    <button class="tab" onclick="show('ui',this)">UI 답변 비교</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════ -->
+<!-- TAB 1 : 전체 흐름도 -->
+<!-- ═══════════════════════════════════════ -->
+<div class="content active" id="flow">
+  <div class="sec-label">SYSTEM FLOW — 고령자 맞춤 의료상담 AI</div>
+
+  <!-- 서비스 원칙 (기획의도 상기) -->
+  <div class="senior-principle">
+    <div class="sp-item">
+      <div class="sp-icon">👴</div>
+      <div class="sp-label">고령자 우선</div>
+      <div class="sp-sub">모바일 우선 375×720<br>TTS 전 기능 지원</div>
+    </div>
+    <div class="sp-item">
+      <div class="sp-icon">🔒</div>
+      <div class="sp-label">개인정보 보호</div>
+      <div class="sp-sub">회원가입 없음<br>세션 종료 시 자동삭제</div>
+    </div>
+    <div class="sp-item">
+      <div class="sp-icon">⚕️</div>
+      <div class="sp-label">안전한 정보</div>
+      <div class="sp-sub">RAG 기반 근거 제시<br>환각 방지 Self-RAG</div>
+    </div>
+    <div class="sp-item">
+      <div class="sp-icon">💊</div>
+      <div class="sp-label">개인 맞춤</div>
+      <div class="sp-sub">기저질환 · 복용약 등록<br>맞춤형 답변 생성</div>
+    </div>
+  </div>
+
+  <!-- 흐름도 -->
+  <div class="flow">
+    <div class="flow-node">
+      <span class="icon">👴</span>
+      <div class="ntitle">시니어 사용자</div>
+      <div class="ndetail">텍스트 입력<br>음성 입력 (TTS)<br>카메라 촬영</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node hl2">
+      <span class="icon">📱</span>
+      <div class="ntitle">React Frontend</div>
+      <div class="ndetail">Vite + Tailwind<br>Web Speech API<br>시니어 UI (큰 글씨)</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node hl">
+      <span class="icon">⚡</span>
+      <div class="ntitle">FastAPI 서버</div>
+      <div class="ndetail">포트 8001<br>9개 REST API<br>프로필 맞춤 처리</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node hl">
+      <span class="icon">🧠</span>
+      <div class="ntitle">RAG Engine</div>
+      <div class="ndetail">hnswlib 직접 검색<br>BM25 RRF 융합<br>Top-5 스니펫</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-node">
+      <span class="icon">✨</span>
+      <div class="ntitle">GPT-4o-mini</div>
+      <div class="ndetail">Self-RAG 환각방지<br>기저질환 맞춤 답변<br>+ 면책 문구 포함</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="pipeline">
+      <div class="pipe-title">// RAG 검색 파이프라인 (현재 아키텍처)</div>
+      <div class="pipe-row">
+        <div class="pipe-step">한국어 질문</div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step em">multilingual-E5-large<br><span style="font-size:9px;opacity:.7">prefix: "query: " 추가</span></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">1024차원 벡터</div>
+      </div>
+      <div class="pipe-row">
+        <div class="pipe-step em">hnswlib knn_query()<br><span style="font-size:9px;opacity:.7">시맨틱 Top-20 (직접 검색)</span></div>
+        <div class="pipe-arrow">+</div>
+        <div class="pipe-step em2">BM25 키워드 검색<br><span style="font-size:9px;opacity:.7">형태소 분석 Top-20</span></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step em3">RRF 융합 (k=60)<br><span style="font-size:9px;opacity:.7">Top-5 최종 선택</span></div>
+      </div>
+      <div class="pipe-row">
+        <div class="pipe-step">Top-5 스니펫</div>
+        <div class="pipe-arrow">+</div>
+        <div class="pipe-step">사용자 프로필<br><span style="font-size:9px;opacity:.7">기저질환·복용약</span></div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step em">GPT-4o-mini<br><span style="font-size:9px;opacity:.7">Self-RAG 적용</span></div>
+      </div>
+      <div style="margin-top:10px;padding:8px 10px;background:rgba(0,201,167,.06);border-radius:4px;border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:10px;color:var(--teal)">
+        ✓ E5-large + BM25 RRF 융합 — Hit Rate@5 <strong>99.5%</strong> 달성 (MedRAG 방법론 계승)</div>
+    </div>
+
+    <div>
+      <div class="grid2" style="margin-bottom:12px">
+        <div class="card">
+          <div class="card-title"><div class="dot"></div>벡터 DB</div>
+          <p><code>hnswlib</code> 직접 검색<br><code>ChromaDB</code> 메타데이터 조회<br>676,570~707,618 청크<br>코사인 유사도</p>
+        </div>
+        <div class="card">
+          <div class="card-title"><div class="dot blue"></div>외부 API</div>
+          <p>식약처 e약은요<br>DUR 병용금기<br>기상청 날씨<br>에어코리아 미세먼지</p>
+        </div>
+      </div>
+      <div class="card teal-glow">
+        <div class="card-title"><div class="dot"></div>Self-RAG 환각 방지</div>
+        <p>
+          <strong style="color:var(--teal)">ISREL</strong>: 검색 문서 관련성 검증<br>
+          <strong style="color:var(--blue)">ISSUP</strong>: 답변 출처 표시 (근거 명시)<br>
+          <strong style="color:var(--purple)">ISUSE</strong>: 고령자 눈높이 쉬운 설명<br>
+          <span style="color:var(--text2);font-size:11px">→ 의료 정보 오류 시 잘못된 복용으로 이어질 수 있어 필수</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>임베딩: <span>multilingual-E5-large</span> (Microsoft, 100개 언어)</div>
+    <div>정확도: <span>99.5% Hit Rate@5</span> (E5-large + BM25 RRF)</div>
+    <div>벡터검색: <span>hnswlib 직접 (knn_query)</span> · ChromaDB 0.4.24 메타데이터 조회</div>
+    <div>TDD: <span>58개 테스트</span> 전 계층 검증</div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════ -->
+<!-- TAB 2 : MedRAG → ChromaDB -->
+<!-- ═══════════════════════════════════════ -->
+<div class="content" id="medrag">
+  <div class="sec-label">MEDRAG 논문 기반 설계 → 한국어 고령자 서비스로 확장</div>
+
+  <div class="trans">
+    <div class="t-block">
+      <div class="t-head">◆ MedRAG 원본 — Xiong et al., ACL 2024</div>
+      <div class="t-row"><span class="k">벡터DB</span><span class="v">FAISS</span></div>
+      <div class="t-row"><span class="k">임베딩</span><span class="v">MedCPT / Contriever<br>(영어 특화)</span></div>
+      <div class="t-row"><span class="k">코퍼스</span><span class="v">PubMed, StatPearls<br>Wikipedia (영어)</span></div>
+      <div class="t-row"><span class="k">시맨틱 단독</span><span class="v">~60% (부족)</span></div>
+      <div class="t-row"><span class="k">검색 전략</span><span class="v">RRF 융합 필수<br>(+10~18%p 향상)</span></div>
+      <div class="t-row"><span class="k">대상</span><span class="v">영어 의료 QA 벤치마크</span></div>
+    </div>
+    <div class="t-arr">⟶<small>한국어<br>고령자<br>서비스</small></div>
+    <div class="t-block after">
+      <div class="t-head">◆ MediScanner — 한국어 고령자 최적화</div>
+      <div class="t-row"><span class="k">벡터DB</span><span class="v new">ChromaDB ✓ (경량 · 로컬)</span></div>
+      <div class="t-row"><span class="k">임베딩</span><span class="v new">multilingual-E5-large ✓<br>(100개 언어, Cross-lingual)</span></div>
+      <div class="t-row"><span class="k">코퍼스</span><span class="v new">AI Hub 한국어 의료 QA<br>151,810건 → 707,618 청크</span></div>
+      <div class="t-row"><span class="k">시맨틱 단독</span><span class="v new">~94.5% 달성 ✓</span></div>
+      <div class="t-row"><span class="k">검색 전략</span><span class="v new">E5-large + BM25 RRF ✓<br>(MedRAG 방법론 계승)</span></div>
+      <div class="t-row"><span class="k">벡터검색</span><span class="v new">hnswlib 직접 (knn_query)<br>ChromaDB 0.4.24 메타데이터만</span></div>
+      <div class="t-row"><span class="k">대상</span><span class="v new">한국 고령자 · 일반 사용자</span></div>
+    </div>
+  </div>
+
+  <div class="grid3">
+    <div class="card">
+      <div class="card-title"><div class="dot red"></div>FAISS → ChromaDB 이유</div>
+      <ul class="list">
+        <li>FAISS: 설치·설정 복잡, 메타데이터 관리 별도</li>
+        <li>ChromaDB: 로컬 실행, 메타데이터 필터링 내장</li>
+        <li>기저질환별 필터링 활용 가능</li>
+        <li>데모 환경에 적합한 경량 구조</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="dot orange"></div>MedCPT → E5-large 이유</div>
+      <ul class="list">
+        <li>MedCPT: 영어 전용 → 한국어 질문 검색 불가</li>
+        <li>E5-large: 한국어 ↔ 영어 Cross-lingual 지원</li>
+        <li>고령자 한국어 질문으로 영어 의료문서 검색</li>
+        <li>임베딩 품질 향상 → RRF 불필요해짐</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="dot"></div>핵심 발견: 임베딩 × RRF 시너지</div>
+      <ul class="list">
+        <li>MedRAG: 약한 임베딩 → RRF로 보완 (+10~18%p)</li>
+        <li>MediScanner: 강한 임베딩 + RRF → 99.5% 달성</li>
+        <li>좋은 임베딩과 하이브리드 검색은 상호 보완적</li>
+        <li>hnswlib 직접 검색으로 안정성·속도 추가 확보</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="hbox teal">
+    <strong>📖 참고 논문</strong>: Xiong et al. (2024) "Benchmarking RAG for Medicine", ACL 2024 Findings.
+    MedRAG가 제시한 RRF 방법론은 임베딩 품질과 무관하게 <strong>하이브리드 검색 자체의 효과</strong>를 입증했습니다.
+    MediScanner는 더 강력한 E5-large에 동일한 RRF를 결합해 <strong>99.5%</strong>를 달성함으로써 이 결론을 한국어 도메인에서 재확인했습니다.
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════ -->
+<!-- TAB 3 : 임베딩 비교 (진행 중) -->
+<!-- ═══════════════════════════════════════ -->
+<div class="content" id="embed">
+  <div class="sec-label">EMBEDDING COMPARISON — 3가지 모델 정확도 비교 실험</div>
+
+  <div class="hbox teal" style="margin-bottom:16px">
+    <strong>임베딩 완료 확정</strong> — E5-large·ko-sroberta: 707,618청크 (원천+라벨링), E5-small: 676,570청크 (원천만). chromadb 0.4.24 + hnswlib 직접 검색 방식으로 전환 완료.
+  </div>
+
+  <table class="tbl" style="margin-bottom:18px">
+    <thead>
+      <tr>
+        <th>모델</th>
+        <th>개발사</th>
+        <th>한국어</th>
+        <th>차원</th>
+        <th>Cross-lingual</th>
+        <th>Hit Rate@5</th>
+        <th>특이사항</th>
+        <th>상태</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <code style="color:var(--red)">MedCPT</code><br>
+          <span style="font-size:10px;color:var(--text2)">MedRAG 논문 기본</span>
+        </td>
+        <td style="font-size:11px">NCBI</td>
+        <td><span class="tag red">❌ 불가</span></td>
+        <td>768</td>
+        <td><span class="tag red">❌</span></td>
+        <td style="color:var(--red)">측정 불가</td>
+        <td style="font-size:11px">영어 전용. 한국어 질문 시 검색 완전 실패</td>
+        <td><span class="tag red">제외</span></td>
+      </tr>
+      <tr class="wip">
+        <td>
+          <code style="color:var(--yellow)">ko-sroberta-multitask</code><br>
+          <span style="font-size:10px;color:var(--text2)">1차 채택 모델</span>
+        </td>
+        <td style="font-size:11px">snunlp</td>
+        <td><span class="tag teal">✓ 한국어</span></td>
+        <td>768</td>
+        <td><span class="tag red">❌</span></td>
+        <td style="color:var(--yellow)">81.2% (RRF)<br><span style="font-size:9px;opacity:.7">1차 실험 기준</span></td>
+        <td style="font-size:11px">한국어 코퍼스에서 작동. 영어 문서 검색 시 성능 저하</td>
+        <td><span class="tag yellow">⚙ 재평가 예정</span></td>
+      </tr>
+      <tr class="wip">
+        <td>
+          <code style="color:var(--orange)">multilingual-E5-small</code><br>
+          <span style="font-size:10px;color:var(--text2)">경량 비교 모델</span>
+        </td>
+        <td style="font-size:11px">Microsoft</td>
+        <td><span class="tag teal">✓ 100개 언어</span></td>
+        <td>384</td>
+        <td><span class="tag teal">✓ 지원</span></td>
+        <td style="color:var(--orange)">~70%<br><span style="font-size:9px;opacity:.7">(정밀 측정 예정)</span></td>
+        <td style="font-size:11px">676,570청크 (원천만, 라벨링 미포함). Cross-lingual 지원하나 384차원 한계로 E5-large 대비 정밀도 낮음</td>
+        <td><span class="tag orange">⚙ 측정 예정</span></td>
+      </tr>
+      <tr class="win">
+        <td>
+          <code style="color:var(--teal)">multilingual-E5-large</code><br>
+          <span style="font-size:10px;color:var(--teal)">현재 채택</span>
+        </td>
+        <td style="font-size:11px">Microsoft</td>
+        <td><span class="tag teal">✓ 100개 언어</span></td>
+        <td>1024</td>
+        <td><span class="tag teal">✓ 지원</span></td>
+        <td style="color:var(--teal);font-weight:700">99.5% (RRF)<br><span style="font-size:9px;opacity:.8">시맨틱 단독 ~94.5%</span></td>
+        <td style="font-size:11px">한국어 질문 → 영어 의료문서 검색 성공. BM25 RRF 융합 채택</td>
+        <td><span class="tag teal">✓ 채택</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><div class="dot"></div>E5-large 모델 스펙</div>
+      <table class="tbl" style="margin:0">
+        <tbody>
+          <tr><td style="color:var(--text2);font-size:11px">기반 모델</td><td style="font-family:var(--mono);font-size:11px">XLM-RoBERTa-large (5.6억 파라미터)</td></tr>
+          <tr><td style="color:var(--text2);font-size:11px">임베딩 차원</td><td style="font-family:var(--mono);font-size:11px;color:var(--teal)">1024차원</td></tr>
+          <tr><td style="color:var(--text2);font-size:11px">지원 언어</td><td style="font-family:var(--mono);font-size:11px;color:var(--teal)">100개 언어</td></tr>
+          <tr><td style="color:var(--text2);font-size:11px">학습 데이터</td><td style="font-family:var(--mono);font-size:11px;color:var(--teal)">10억 개 다국어 텍스트 쌍</td></tr>
+          <tr><td style="color:var(--text2);font-size:11px">최대 토큰</td><td style="font-family:var(--mono);font-size:11px">512 토큰</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="dot orange"></div>E5-large Prefix 규칙 (필수)</div>
+      <p style="margin-bottom:10px;font-size:11.5px">E5-large는 prefix 없이는 성능이 크게 하락합니다.</p>
+      <div style="background:#F0F4F8;border:1.5px solid var(--border);border-radius:5px;padding:14px;font-family:var(--mono);font-size:12px;line-height:2.2;color:var(--text)">
+        <div><span style="color:var(--text2)">// 문서 저장 시</span></div>
+        <div><span style="color:var(--teal)">"passage: "</span> <span style="color:var(--text)">고혈압은 혈압이 정상 범위보다...</span></div>
+        <div style="margin-top:4px"><span style="color:var(--text2)">// 검색 쿼리 시</span></div>
+        <div><span style="color:var(--blue)">"query: "</span> <span style="color:var(--text)">고혈압 약 먹는데 자몽 먹어도 돼?</span></div>
+      </div>
+      <p style="margin-top:8px;font-size:11px;color:var(--text2)">
+        ※ 고령자 구어체 질문에도 동일하게 적용 → 자연스러운 질문 그대로 처리 가능
+      </p>
+    </div>
+  </div>
+
+  <div class="hbox orange">
+    <strong>Cross-lingual 원리</strong>: E5-large는 "같은 의미 = 같은 벡터 공간"으로 학습됩니다. 
+    한국어 "당뇨병 증상" 과 영어 "diabetes symptoms" 의 벡터가 근접하게 배치되어, 
+    고령자가 자연어로 질문하면 한국어·영어 코퍼스 모두에서 관련 문서를 찾아냅니다.
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════ -->
+<!-- TAB 4 : 검색·DB 아키텍처 -->
+<!-- ═══════════════════════════════════════ -->
+<div class="content" id="rrf">
+  <div class="sec-label">SEARCH & DB ARCHITECTURE — 검색 전략 확정 + hnswlib 전환</div>
+
+  <!-- 검색 전략 변천 -->
+  <div class="trans" style="margin-bottom:18px">
+    <div class="t-block">
+      <div class="t-head">◆ 1차 설계 — ko-sroberta + RRF</div>
+      <div class="t-row"><span class="k">임베딩</span><span class="v">ko-sroberta (768d)</span></div>
+      <div class="t-row"><span class="k">시맨틱 단독</span><span class="v">69.4% @5</span></div>
+      <div class="t-row"><span class="k">BM25+RRF</span><span class="v">81.2% @5 ← 1차 최고</span></div>
+      <div class="t-row"><span class="k">한계</span><span class="v">영어 의료문서 검색 불가<br>Cross-lingual 미지원</span></div>
+      <div class="t-row"><span class="k">DB</span><span class="v">ChromaDB 0.6.3 collection.query()</span></div>
+    </div>
+    <div class="t-arr">⟶<small>임베딩<br>+ DB<br>교체</small></div>
+    <div class="t-block after">
+      <div class="t-head">◆ 최종 확정 — E5-large + RRF + hnswlib ✓</div>
+      <div class="t-row"><span class="k">임베딩</span><span class="v new">multilingual-E5-large (1024d)</span></div>
+      <div class="t-row"><span class="k">시맨틱 단독</span><span class="v new">~94.5% @5</span></div>
+      <div class="t-row"><span class="k">BM25+RRF</span><span class="v new">99.5% @5 ✓ 최고</span></div>
+      <div class="t-row"><span class="k">구조</span><span class="v new">Top-20 + Top-20 → RRF(k=60) → Top-5</span></div>
+      <div class="t-row"><span class="k">DB</span><span class="v new">hnswlib knn_query() 직접 검색<br>ChromaDB 0.4.24 메타데이터만</span></div>
+    </div>
+  </div>
+
+  <!-- 성능 비교표 -->
+  <div class="sec-label" style="margin-bottom:12px">검색 방식 × 임베딩 모델 비교 실험</div>
+  <table class="tbl" style="margin-bottom:16px">
+    <thead>
+      <tr><th>검색 방식</th><th>임베딩</th><th>Top-3</th><th>Top-5</th><th>Top-10</th><th>평가</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>시맨틱 단독</td>
+        <td style="font-size:11px">ko-sroberta</td>
+        <td style="color:var(--text2)">65.8%</td>
+        <td style="color:var(--text2)">69.4%</td>
+        <td style="color:var(--text2)">75.4%</td>
+        <td style="font-size:11px">기준선</td>
+      </tr>
+      <tr>
+        <td>BM25 단독</td>
+        <td style="font-size:11px">—</td>
+        <td style="color:var(--text2)">56.2%</td>
+        <td style="color:var(--text2)">62.8%</td>
+        <td style="color:var(--text2)">71.4%</td>
+        <td style="font-size:11px">시맨틱보다 낮음</td>
+      </tr>
+      <tr>
+        <td>RRF 하이브리드</td>
+        <td style="font-size:11px">ko-sroberta</td>
+        <td style="color:var(--blue)">77.0%</td>
+        <td style="color:var(--blue)">81.2%</td>
+        <td style="color:var(--blue)">84.4%</td>
+        <td><span class="tag blue">1차 최고</span></td>
+      </tr>
+      <tr>
+        <td>시맨틱 단독</td>
+        <td style="font-size:11px;color:var(--teal)">E5-large</td>
+        <td style="color:var(--text2)">—</td>
+        <td style="color:var(--yellow)">~94.5%</td>
+        <td style="color:var(--text2)">—</td>
+        <td style="font-size:11px">임베딩 교체만으로 +25.1%p 향상</td>
+      </tr>
+      <tr class="win">
+        <td><strong>RRF 하이브리드 ✓</strong></td>
+        <td style="font-size:11px;color:var(--teal)"><strong>E5-large</strong></td>
+        <td style="color:var(--teal)">—</td>
+        <td style="color:var(--teal);font-weight:700">99.5%</td>
+        <td style="color:var(--teal)">—</td>
+        <td><span class="tag teal">✓ 최종 채택</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="hbox teal">
+    <strong>핵심 인사이트</strong>: MedRAG와 MediScanner 모두 동일한 결론 — <strong>RRF가 Best</strong>.
+    MedRAG(MedCPT): RRF로 60%→78%. MediScanner(E5-large): RRF로 94.5%→<strong>99.5%</strong>.
+    좋은 임베딩과 하이브리드 검색은 상호 보완적이며, 둘 다 적용할 때 최대 효과를 냅니다.
+  </div>
+
+  <!-- ChromaDB → hnswlib 아키텍처 변경 -->
+  <div class="sec-label" style="margin-bottom:12px">DB 아키텍처 변경 — ChromaDB → hnswlib 직접 검색</div>
+  <div class="trans" style="margin-bottom:14px">
+    <div class="t-block">
+      <div class="t-head">◆ 기존 — ChromaDB 단일 구조</div>
+      <div class="t-row"><span class="k">버전</span><span class="v">chromadb 0.6.3</span></div>
+      <div class="t-row"><span class="k">검색</span><span class="v">collection.query() 내부 HNSW</span></div>
+      <div class="t-row"><span class="k">문제</span><span class="v">대용량(70만) HNSW 저장 불안정<br>header.bin 미생성 → 시맨틱 37% 폭락</span></div>
+      <div class="t-row"><span class="k">텍스트/메타</span><span class="v">ChromaDB 내부 SQLite</span></div>
+    </div>
+    <div class="t-arr">⟶<small>분리</small></div>
+    <div class="t-block after">
+      <div class="t-head">◆ 현재 확정 — 역할 분리 구조 ✓</div>
+      <div class="t-row"><span class="k">버전</span><span class="v new">chromadb 0.4.24</span></div>
+      <div class="t-row"><span class="k">벡터 검색</span><span class="v new">hnswlib knn_query() 직접 ✓<br>(hnsw_index.bin 명시적 관리)</span></div>
+      <div class="t-row"><span class="k">안정성</span><span class="v new">인덱스 파일 직접 제어<br>대용량에서도 안정적</span></div>
+      <div class="t-row"><span class="k">텍스트/메타</span><span class="v new">ChromaDB SQLite 조회 전용</span></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><div class="dot"></div>RRF 파이프라인 구조 (확정)</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:8px">BM25 + hnswlib 각각 <strong style="color:var(--text)">Top-20</strong> 후보 추출 후 RRF(k=60) 재정렬.</p>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text2);line-height:2;background:#F4F6F9;border-radius:6px;padding:10px 14px">
+        hnswlib knn_query() → 시맨틱 Top-20<br>
+        BM25 (kiwipiepy 형태소) → 키워드 Top-20<br>
+        ──────────────────────────────<br>
+        <span style="color:var(--teal)">RRF_score = Σ 1/(k + rank_i)  k=60</span><br>
+        ──────────────────────────────<br>
+        최종 Top-5 → ChromaDB 메타데이터 조회 → GPT-4o-mini
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="dot blue"></div>역할 분리 원칙</div>
+      <ul class="list">
+        <li><strong style="color:var(--teal)">hnswlib</strong>: hnsw_index.bin 명시적 관리 — 고속 벡터 유사도 검색</li>
+        <li><strong style="color:var(--blue)">ChromaDB 0.4.24</strong>: SQLite 텍스트·메타데이터 조회 전용 (검색 미사용)</li>
+        <li>build_hnsw_from_sqlite.py로 인덱스 빌드 — 대용량 안정성 확보</li>
+        <li>각 모델별 독립 hnsw_index.bin 파일 관리</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════ -->
+<!-- TAB 5 : UI 답변 비교 (진행 중) -->
+<!-- ═══════════════════════════════════════ -->
+<div class="content" id="ui">
+  <div class="sec-label">UI ANSWER COMPARISON — 3가지 임베딩 모델 실제 답변 차이</div>
+
+  <div class="hbox teal" style="margin-bottom:14px">
+    <strong>비교 기준</strong> — E5-large+RRF 99.5% 확정. ko-sroberta 81.2% (1차 실험). E5-small ~70% (측정 예정, 676,570청크 원천만). 아래 답변 품질은 검색 정확도 차이에 따른 시뮬레이션입니다.
+  </div>
+
+  <!-- 질문 상황 설정 -->
+  <div style="background:rgba(77,166,255,.07);border:1px solid rgba(77,166,255,.2);border-radius:6px;padding:10px 16px;margin-bottom:14px;font-size:12px;">
+    <div style="color:var(--blue);font-weight:700;margin-bottom:4px">👴 테스트 시나리오 — 고령자 실제 질문 패턴</div>
+    <div style="color:var(--text)">"고혈압 약 먹는데 자몽 먹어도 돼? 텔미사르탄 80mg 먹고 있어."</div>
+    <div style="color:var(--text2);margin-top:4px;font-size:11px">등록 프로필: 만 72세 · 기저질환: 고혈압 · 복용약: 텔미사르탄 80mg · 모드: 간단</div>
+  </div>
+
+  <div class="mock-grid-4">
+    <!-- MedCPT -->
+    <div class="mock">
+      <div class="mock-head">
+        <span style="color:var(--red);font-weight:600">MedCPT</span>
+        <span class="tag red">검색 실패</span>
+      </div>
+      <div class="mock-body">
+        <div class="mock-q">고혈압 약 먹는데 자몽 먹어도 돼?</div>
+        <div class="mock-a">
+          <p class="err">⚠ 관련 문서를 찾을 수 없습니다.</p>
+          <br>
+          <p>약 복용 시 자몽 섭취에 대해 정확한 정보를 드리기 어렵습니다. 의사 또는 약사에게 문의하시기 바랍니다.</p>
+          <br>
+          <p style="font-size:11px;color:var(--text2)">※ 한국어 쿼리 → 영어 코퍼스 매칭 완전 실패. RAG 미작동.</p>
+        </div>
+        <div class="mock-score">
+          <span class="lbl">Hit Rate@5</span>
+          <div class="bar-wrap"><div class="bar" style="background:var(--red);width:2%"></div></div>
+          <span class="pct" style="color:var(--red)">~0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ko-sroberta -->
+    <div class="mock wip-border">
+      <div class="mock-head">
+        <span style="color:var(--yellow);font-weight:600">ko-sroberta + RRF</span>
+        <span class="tag yellow">81.2% @5</span>
+      </div>
+      <div class="mock-body">
+        <div class="mock-q">고혈압 약 먹는데 자몽 먹어도 돼?</div>
+        <div class="mock-a">
+          <p>텔미사르탄 복용 중에는 <span class="warn">자몽 섭취에 주의</span>가 필요합니다.</p>
+          <br>
+          <p>자몽은 일부 혈압약의 <strong>흡수를 방해</strong>할 수 있습니다.</p>
+          <br>
+          <p style="font-size:11px;color:var(--text2)">※ 한국어 QA 검색 성공. 영어 전문 의료문서 매칭 불가 → 메커니즘 설명 없음.</p>
+        </div>
+        <div class="mock-score">
+          <span class="lbl">Hit Rate@5</span>
+          <div class="bar-wrap"><div class="bar" style="background:#C49000;width:81%"></div></div>
+          <span class="pct" style="color:var(--yellow)">81.2%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- E5-small -->
+    <div class="mock wip-border" style="border-color:var(--orange)">
+      <div class="mock-head" style="border-bottom-color:var(--border)">
+        <span style="color:var(--orange);font-weight:600">E5-small + RRF</span>
+        <span class="tag orange">⚙ 재평가 예정</span>
+      </div>
+      <div class="mock-body">
+        <div class="mock-q" style="border-left-color:var(--orange);background:var(--orangeBg);">고혈압 약 먹는데 자몽 먹어도 돼?</div>
+        <div class="mock-a">
+          <p>자몽은 일부 혈압약과 상호작용이 있어 <span class="warn">주의</span>가 필요합니다.</p>
+          <br>
+          <p>CYP3A4 효소와 관련된 <strong>약물 대사</strong>에 영향을 줄 수 있습니다.</p>
+          <br>
+          <p style="font-size:11px;color:var(--text2)">※ 676,570청크 (원천만, 라벨링 미포함). Cross-lingual 지원하나 384차원 한계. 정밀 측정 예정.</p>
+        </div>
+        <div class="mock-score">
+          <span class="lbl">Hit Rate@5</span>
+          <div class="bar-wrap"><div class="bar" style="background:var(--orange);width:70%"></div></div>
+          <span class="pct" style="color:var(--orange)">~70%?</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- E5-large -->
+    <div class="mock best">
+      <div class="mock-head" style="background:var(--tealBg);">
+        <span style="color:var(--teal);font-weight:600">E5-large + RRF ✓</span>
+        <span class="tag teal">99.5% 채택</span>
+      </div>
+      <div class="mock-body">
+        <div class="mock-q" style="border-left-color:var(--teal);color:var(--teal);background:var(--tealBg);">고혈압 약 먹는데 자몽 먹어도 돼?</div>
+        <div class="mock-a">
+          <p>① <strong>텔미사르탄</strong>(ARB 계열)과 자몽의 직접 상호작용은 적지만, <span class="hl">자몽(그레이프프루트)</span> 주의 필요.</p>
+          <br>
+          <p>② 자몽의 <span class="hl">푸라노쿠마린</span>이 CYP3A4 억제 → 일부 혈압약 농도 상승 가능.</p>
+          <br>
+          <p>③ <span class="warn">하루 한 잔 이하</span> 또는 복용 후 4시간 이상 간격 권장.</p>
+          <br>
+          <p style="font-size:11px;color:var(--text2)">⚠ 의료 정보 제공 목적 — 전문의 상담 권고.</p>
+        </div>
+        <div class="mock-score">
+          <span class="lbl">Hit Rate@5</span>
+          <div class="bar-wrap"><div class="bar" style="background:var(--teal);width:99.5%"></div></div>
+          <span class="pct" style="color:var(--teal)">99.5%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec-label" style="margin-bottom:12px">고령자 서비스 관점 평가</div>
+  <table class="tbl">
+    <thead>
+      <tr><th>평가 항목</th><th>MedCPT</th><th>ko-sroberta</th><th style="color:var(--orange)">E5-small</th><th>E5-large ✓</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>구어체 질문 이해</td>
+        <td><span class="tag red">❌ 실패</span></td>
+        <td><span class="tag yellow">△ 부분</span></td>
+        <td><span class="tag orange">△ 부분</span></td>
+        <td><span class="tag teal">✓ 성공</span></td>
+      </tr>
+      <tr>
+        <td>영어 의료문서 활용</td>
+        <td><span class="tag red">❌ 불가</span></td>
+        <td><span class="tag red">❌ 불가</span></td>
+        <td><span class="tag orange">△ 제한적</span></td>
+        <td><span class="tag teal">✓ Cross-lingual</span></td>
+      </tr>
+      <tr>
+        <td>기저질환 연계 답변</td>
+        <td><span class="tag red">❌</span></td>
+        <td><span class="tag yellow">△ 제한적</span></td>
+        <td><span class="tag orange">△ 제한적</span></td>
+        <td><span class="tag teal">✓ 프로필 반영</span></td>
+      </tr>
+      <tr>
+        <td>Hit Rate@5</td>
+        <td style="color:var(--red);font-weight:700">~0%</td>
+        <td style="color:var(--yellow);font-weight:700">81.2%</td>
+        <td style="color:var(--orange);font-weight:700">~70%?<br><span style="font-size:10px;font-weight:400">재평가 예정</span></td>
+        <td style="color:var(--teal);font-weight:700">99.5%</td>
+      </tr>
+      <tr>
+        <td>면책 문구 포함</td>
+        <td style="font-size:12px;color:var(--text2)">GPT 기본 출력</td>
+        <td style="font-size:12px;color:var(--text2)">GPT 기본 출력</td>
+        <td style="font-size:12px;color:var(--text2)">GPT 기본 출력</td>
+        <td><span class="tag teal">✓ Self-RAG ISUSE</span></td>
+      </tr>
+      <tr>
+        <td>고령자 적합성</td>
+        <td><span class="tag red">❌ 부적합</span></td>
+        <td><span class="tag yellow">△ 보통</span></td>
+        <td><span class="tag orange">△ 보통</span></td>
+        <td><span class="tag teal">✓ TTS + 쉬운 설명</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <div>최종 확정: <span>E5-large + BM25 RRF</span> — Hit Rate@5 <span>99.5%</span></div>
+    <div>DB 아키텍처: <span>hnswlib 직접 검색</span> + ChromaDB 0.4.24 메타데이터 조회</div>
+    <div>면책 문구: <span>Self-RAG ISUSE</span> — 의료 정보 제공 목적 명시, 전문의 상담 권고 포함</div>
+    <div>TTS: <span>전 기능 음성 출력</span> — 답변 읽기 지원 (고령자 접근성)</div>
+  </div>
+</div>
+
+
+<script>
+  function show(id, btn) {
+    document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+  }
+</script>
+</body>
+</html>

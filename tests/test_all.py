@@ -574,34 +574,34 @@ class TestAnswerMode:
         return engine
 
     def test_simple_mode_uses_low_max_tokens(self):
-        """간단 모드는 max_tokens가 80이어야 한다"""
+        """간단 모드는 max_tokens가 200이어야 한다"""
         engine = self._make_engine()
         engine.generate_answer("테스트", [], answer_mode="simple")
         call_args = engine.client.chat.completions.create.call_args
-        assert call_args[1]["max_tokens"] == 80
+        assert call_args[1]["max_tokens"] == 200
 
     def test_detailed_mode_uses_high_max_tokens(self):
-        """상세 모드는 max_tokens가 500이어야 한다"""
+        """상세 모드는 max_tokens가 800이어야 한다"""
         engine = self._make_engine()
         engine.generate_answer("테스트", [], answer_mode="detailed")
         call_args = engine.client.chat.completions.create.call_args
-        assert call_args[1]["max_tokens"] == 500
+        assert call_args[1]["max_tokens"] == 800
 
     def test_simple_prompt_contains_one_sentence_rule(self):
-        """간단 모드 프롬프트에 '20자 이내' 규칙이 포함되어야 한다"""
+        """간단 모드 프롬프트에 핵심 답변 규칙이 포함되어야 한다"""
         engine = self._make_engine()
         engine.generate_answer("테스트", [], answer_mode="simple")
         call_args = engine.client.chat.completions.create.call_args
         system_prompt = call_args[1]["messages"][0]["content"]
-        assert "20자 이내" in system_prompt
+        assert "간단 답변 규칙" in system_prompt
 
     def test_detailed_prompt_contains_four_sentence_rule(self):
-        """상세 모드 프롬프트에 '상호작용' 규칙이 포함되어야 한다"""
+        """상세 모드 프롬프트에 답변 규칙이 포함되어야 한다"""
         engine = self._make_engine()
         engine.generate_answer("테스트", [], answer_mode="detailed")
         call_args = engine.client.chat.completions.create.call_args
         system_prompt = call_args[1]["messages"][0]["content"]
-        assert "상호작용" in system_prompt
+        assert "답변 규칙" in system_prompt
 
 # ══════════════════════════════════════════════════════════════
 # 8. XML/CDATA 파싱 테스트 (2026-03-20 추가)

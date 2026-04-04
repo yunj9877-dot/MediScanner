@@ -85,6 +85,7 @@ class ChatRequest(BaseModel):
     answer_mode: str = "simple"
     user_id: str = "default"
     save_history: bool = True
+    model: str = "e5-large"  # 임베딩 모델 선택: e5-large / ko-sroberta / e5-small
 
 
 class DrugSearchRequest(BaseModel):
@@ -167,8 +168,8 @@ async def chat(request: ChatRequest):
             detail="OpenAI API 키를 먼저 설정해주세요. /api/set-keys 엔드포인트를 사용하세요.",
         )
 
-    # 1) ChromaDB 벡터 검색 (ko-sroberta 임베딩, 무료)
-    retrieved_docs = rag_engine.search(request.query)
+    # 1) ChromaDB 벡터 검색 (선택된 임베딩 모델 사용)
+    retrieved_docs = rag_engine.search(request.query, model=request.model)
 
     # 2) 의약품명 추출 → API 호출
     drug_api_data = None
@@ -184,6 +185,29 @@ async def chat(request: ChatRequest):
     # 3) 건강 프로필 조회 (있으면 맞춤 답변)
     user_profile = db.get_profile(request.user_id)
 
+    # 3-1) 프로필 복용약 → 식약처 API 병렬 조회 (방법 A)
+    profile_drug_api_data = []
+    if user_profile and user_profile.get("medications") and drug_client and drug_client.api_key:
+        import asyncio
+        med_names = [m.strip() for m in user_profile["medications"].split(",") if m.strip()]
+        print(f"[복용약 API 조회 시작] {med_names}")
+        async def safe_search(name):
+            try:
+                result = await drug_client.search_unified(name)
+                if result.get("found"):
+                    print(f"[복용약 API 성공] {name} → {result.get('item_name')} / {result.get('efcy','')[:50]}")
+                    return result
+                else:
+                    print(f"[복용약 API 미발견] {name}")
+            except Exception as e:
+                print(f"[복용약 API 오류] {name}: {e}")
+            return None
+        results = await asyncio.gather(*[safe_search(name) for name in med_names])
+        profile_drug_api_data = [r for r in results if r]
+        print(f"[복용약 API 완료] {len(profile_drug_api_data)}개 조회 성공")
+    else:
+        print(f"[복용약 API 건너뜀] medications={user_profile.get('medications') if user_profile else None}, api_key={bool(drug_client and drug_client.api_key)}")
+
     # 4) GPT-4o-mini 답변 생성 (유료)
     result = rag_engine.generate_answer(
         query=request.query,
@@ -192,6 +216,7 @@ async def chat(request: ChatRequest):
         dur_api_data=dur_api_data,
         answer_mode=request.answer_mode,
         user_profile=user_profile,
+        profile_drug_api_data=profile_drug_api_data,
     )
 
     # 5) 상담 히스토리 저장 (save_history=False면 건너뜀)
@@ -484,7 +509,7 @@ async def ocr_medications(request: CameraRequest):
         response = rag_engine.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "이미지에서 약 이름만 추출하세요. 쉼표로 구분하여 약 이름만 나열하세요. 다른 설명은 하지 마세요. 예: 아스피린, 메트포르민, 암로디핀"},
+                {"role": "system", "content": "상품명(브랜드명)만 추출하세요. 쉼표로 구분하여 나열하세요. 다른 설명은 하지 마세요. 약통/처방전에 표시된 상품명만 추출하고, 성분명(피타바스타틴, 로수바스타틴, 에제티미브, 암로디핀 등 화학/일반명)은 절대 포함하지 마세요. 예: 페바로젯정, 텔미지, 고덱스"},
                 {"role": "user", "content": [
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{request.image_base64}"}},
                     {"type": "text", "text": "이 처방전/약봉투에 있는 약 이름만 추출해주세요."},
@@ -519,7 +544,7 @@ async def camera_medications(request: CameraRequest):
         response = rag_engine.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "이미지에서 약 이름만 추출하세요. 쉼표로 구분하여 약 이름만 나열하세요. 다른 설명은 하지 마세요. 예: 아스피린, 메트포르민, 아토르바스타틴"},
+                {"role": "system", "content": "이미지에서 약 이름만 추출하세요. 쉼표로 구분하여 약 이름만 나열하세요. 다른 설명은 하지 마세요.\n반드시 처방된 약품명(상품명)만 추출하고, 성분명(예: 피타바스타틴, 로수바스타틴, 암로디핀 등)은 절대 포함하지 마세요.\n예: 페바로젯정, 텔미지, 아스피린프로텍트"},
                 {"role": "user", "content": [
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{request.image_base64}"}},
                     {"type": "text", "text": "이 이미지에서 약 이름만 추출해주세요."},
@@ -547,15 +572,90 @@ async def camera_medications(request: CameraRequest):
 @app.post("/api/camera/analyze")
 async def camera_analyze(request: CameraRequest):
     """
-    GPT-4 Vision으로 약 성분표/처방전 이미지 분석
-    1) 이미지에서 약 이름/성분 추출
-    2) 건강 프로필 기반 주의사항 생성
+    약 스캔 3단계 파이프라인:
+    1) GPT Vision → 약 이름만 추출
+    2) 식약처 API → 정확한 약효/주의사항 조회
+    3) GPT → API 데이터 기반 설명 생성
     """
     if not rag_engine or not rag_engine.client:
         raise HTTPException(status_code=400, detail="OpenAI API 키를 먼저 설정해주세요.")
 
     # 건강 프로필 조회
     user_profile = db.get_profile(request.user_id)
+
+    # ── 1단계: GPT Vision → 약 이름만 추출 ──
+    import re, asyncio
+    try:
+        name_resp = rag_engine.client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "약통/약봉투 이미지에서 상품명(브랜드명)만 추출하세요. 성분명(피타바스타틴, 에제티미브, 암로디핀 등 화학명/일반명)은 절대 포함하지 마세요. 한국어 상품명만 쉼표로 구분하여 반환하세요. 예: 페바로젯정, 고덱스캡슐"},
+                {"role": "user", "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{request.image_base64}"}},
+                    {"type": "text", "text": "이 약의 상품명만 한국어로 추출해주세요. 성분명은 제외하세요."},
+                ]},
+            ],
+            temperature=0.1,
+            max_tokens=100,
+        )
+        rag_engine.usage["input_tokens"] += name_resp.usage.prompt_tokens
+        rag_engine.usage["output_tokens"] += name_resp.usage.completion_tokens
+        rag_engine.usage["api_calls"] += 1
+        raw_names = name_resp.choices[0].message.content.strip()
+        drug_names = [n.strip() for n in raw_names.split(',') if n.strip()]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"약 이름 추출 실패: {str(e)}")
+
+    # 영어→한국어 사전 변환
+    ENG_TO_KOR = {
+        "momet nasal spray": "모메트 나잘 스프레이", "mometasone": "모메타손",
+        "godex": "고덱스", "nasonex": "나조넥스", "flonase": "플로나제",
+        "tylenol": "타이레놀", "advil": "애드빌", "aspirin": "아스피린",
+        "ibuprofen": "이부프로펜", "amoxicillin": "아목시실린", "metformin": "메트포르민",
+    }
+    def translate_drug_name(name):
+        lower = name.lower().strip()
+        for eng, kor in ENG_TO_KOR.items():
+            if eng in lower:
+                return kor
+        return name
+    drug_names = [translate_drug_name(n) for n in drug_names]
+    print(f"[약스캔] 추출된 약 이름: {drug_names}")
+
+    # ── 2단계: 식약처 API → 정확한 약효 조회 ──
+    api_results = []
+    if drug_client and drug_client.api_key:
+        async def safe_search(name):
+            try:
+                result = await drug_client.search_unified(name)
+                if result.get("found"):
+                    print(f"[약스캔 API 성공] {name} → {result.get('efcy','')[:60]}")
+                    return result
+                print(f"[약스캔 API 미발견] {name}")
+            except Exception as e:
+                print(f"[약스캔 API 오류] {name}: {e}")
+            return None
+        results = await asyncio.gather(*[safe_search(name) for name in drug_names])
+        api_results = [r for r in results if r]
+
+    # ── 3단계: GPT → API 데이터 기반 설명 생성 ──
+    # 컨텍스트 구성
+    context_parts = []
+    if api_results:
+        context_parts.append("【식약처 확인 약품 정보】")
+        for drug in api_results:
+            context_parts.append(f"▶ {drug.get('item_name','')} ({drug.get('entp_name','')})")
+            if drug.get('ingredient') and drug.get('ingredient') != '관련 정보 없음':
+                context_parts.append(f"  성분: {drug.get('ingredient','')[:100]}")
+            if drug.get('efcy') and drug.get('efcy') != '관련 정보 없음':
+                context_parts.append(f"  효능: {drug.get('efcy','')[:300]}")
+            if drug.get('use_method') and drug.get('use_method') != '관련 정보 없음':
+                context_parts.append(f"  용법: {drug.get('use_method','')[:200]}")
+            if drug.get('atpn') and drug.get('atpn') != '관련 정보 없음':
+                context_parts.append(f"  주의사항: {drug.get('atpn','')[:200]}")
+            if drug.get('se') and drug.get('se') != '관련 정보 없음':
+                context_parts.append(f"  부작용: {drug.get('se','')[:150]}")
+
     profile_context = ""
     if user_profile:
         parts = []
@@ -568,58 +668,53 @@ async def camera_analyze(request: CameraRequest):
         if parts:
             profile_context = "\n".join(parts)
 
-    system_prompt = """당신은 약 성분표/처방전을 분석하는 의료 AI 메디스캐너입니다.
+    system_prompt = """당신은 고령자를 위한 의료 AI 메디스캐너입니다.
+아래 【식약처 확인 약품 정보】를 바탕으로 어르신이 이해하기 쉽게 설명하세요.
 
-이미지를 분석하여:
-1. 이미지에 보이는 약 이름을 모두 추출하세요.
-2. 각 약의 효능, 용법, 주의사항을 간단히 설명하세요.
-3. 사용자 건강 정보가 있으면 기저질환/복용약과의 상호작용 주의사항을 ⚠️로 표시하세요.
-4. 어르신이 이해하기 쉬운 말로 설명하세요.
-5. 마지막에 "※ 참고용 정보이며, 정확한 진단은 의료 전문가와 상담하세요." 추가"""
+규칙:
+1. 반드시 식약처 정보에 있는 내용만 사용하세요. 없는 내용은 절대 추가하지 마세요.
+2. 어려운 의학 용어는 쉬운 말로 바꾸세요. 예: "경구투여" → "입으로 드세요"
+3. 핵심만 3~4문장으로 간결하게 설명하세요.
+4. 주의사항은 ⚠️로 표시하고 꼭 포함하세요.
+5. 사용자 건강 정보가 있으면 기저질환/복용약과의 관련성을 ⚠️로 추가하세요.
+6. 마지막에 "※ 참고용 정보이며, 정확한 진단은 의료 전문가와 상담하세요." 추가"""
 
-    user_content = [
-        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{request.image_base64}"}},
-        {"type": "text", "text": f"이 이미지에 있는 약/성분을 분석해주세요.{chr(10) + chr(10) + '【사용자 건강 정보】' + chr(10) + profile_context if profile_context else ''}"},
-    ]
+    user_text = f"{chr(10).join(context_parts)}"
+    if profile_context:
+        user_text += f"\n\n【사용자 건강 정보】\n{profile_context}"
+    user_text += "\n\n위 약에 대해 어르신이 이해하기 쉽게 설명해주세요."
+
+    # API 결과 없으면 이미지 직접 분석으로 fallback
+    if not api_results:
+        user_text = f"이미지에서 찾은 약: {', '.join(drug_names)}\n식약처 API 조회 실패. 이미지를 직접 분석하여 설명해주세요."
 
     try:
-        response = rag_engine.client.chat.completions.create(
+        resp = rag_engine.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
+                {"role": "user", "content": user_text},
             ],
             temperature=0.3,
-            max_tokens=800,
+            max_tokens=700,
         )
-
-        answer = response.choices[0].message.content
-        usage = response.usage
-        rag_engine.usage["input_tokens"] += usage.prompt_tokens
-        rag_engine.usage["output_tokens"] += usage.completion_tokens
+        answer = resp.choices[0].message.content
+        rag_engine.usage["input_tokens"] += resp.usage.prompt_tokens
+        rag_engine.usage["output_tokens"] += resp.usage.completion_tokens
         rag_engine.usage["api_calls"] += 1
 
-        # 약 이름 추출 (간단 파싱)
-        drug_names = []
-        for line in answer.split('\n'):
-            if '약' in line or '정' in line or '캡슐' in line:
-                import re
-                names = re.findall(r'[가-힣a-zA-Z]+(?:정|캡슐|알|크림|연고|시럽)', line)
-                drug_names.extend(names)
-
-        # 프로필 기반 경고 분리
         profile_warning = None
-        if user_profile and user_profile.get("diseases"):
-            if "⚠️" in answer:
-                warning_parts = [l.strip() for l in answer.split('\n') if '⚠️' in l]
-                if warning_parts:
-                    profile_warning = '\n'.join(warning_parts)
+        if "⚠️" in answer:
+            warning_parts = [l.strip() for l in answer.split('\n') if '⚠️' in l]
+            if warning_parts:
+                profile_warning = '\n'.join(warning_parts)
 
         return {
             "analysis": answer,
-            "drug_names": list(set(drug_names)),
+            "drug_names": drug_names,
             "profile_warning": profile_warning,
-            "tokens": {"input": usage.prompt_tokens, "output": usage.completion_tokens},
+            "drug_source": api_results[0].get("source", "") if api_results else "",
+            "tokens": {"input": resp.usage.prompt_tokens, "output": resp.usage.completion_tokens},
         }
 
     except Exception as e:
@@ -695,18 +790,73 @@ class AnalyzeProfileRequest(BaseModel):
 
 @app.post("/api/analyze-profile")
 async def analyze_profile(request: AnalyzeProfileRequest):
-    """나이·기저질환·복용약 분석 — RAG 없이 GPT 직접 호출 (3~5초)"""
+    """나이·기저질환·복용약 분석 — 식약처 API + GPT"""
     if not rag_engine or not rag_engine.client:
         raise HTTPException(status_code=400, detail="OpenAI API 키를 먼저 설정해주세요.")
 
-    system_prompt = """의료 정보 분석 AI입니다. 대한의학회 기준으로 간결하게 답변하세요.
-각 항목은 1줄 이내로, ①②③ 기호를 사용하세요."""
+    import asyncio
+
+    # 식약처 API로 복용약 조회
+    med_api_info = []
+    if request.medications and drug_client and drug_client.api_key:
+        med_names = [m.strip() for m in request.medications.split(',') if m.strip()]
+        async def safe_search(name):
+            try:
+                result = await drug_client.search_unified(name)
+                if result.get("found"):
+                    return name, result
+            except Exception:
+                pass
+            return name, None
+        results = await asyncio.gather(*[safe_search(name) for name in med_names])
+        med_api_info = [(name, r) for name, r in results]
+
+    # medications_str 구성 — API 결과 있으면 정확한 정보 사용, 없으면 이름만
+    KNOWN_MEDS = {
+        "고덱스": "간장약 (전문의약품) — 간세포 손상으로 인한 트랜스아미나제(SGPT/ALT) 수치 상승 시 수치를 낮추고 간세포를 보호합니다.",
+        "텔미지": "고혈압 치료제 (ARB 계열, 혈압 강하)",
+        "텔미사르탄": "고혈압 치료제 (ARB 계열, 혈압 강하)",
+        "페바로젯": "고지혈증 치료제 (스타틴 계열, 콜레스테롤 감소)",
+        "페바로젯정": "고지혈증 치료제 (스타틴 계열, 콜레스테롤 감소)",
+        "아스피린": "혈전 예방 및 항혈소판제",
+        "메트포르민": "당뇨병 치료제 (혈당 조절)",
+        "글리메피리드": "당뇨병 치료제 (인슐린 분비 촉진)",
+        "암로디핀": "고혈압·협심증 치료제 (칼슘채널차단제)",
+        "로수바스타틴": "고지혈증 치료제 (스타틴 계열)",
+        "아토르바스타틴": "고지혈증 치료제 (스타틴 계열)",
+    }
+
+    med_context_parts = []
+    if med_api_info:
+        med_context_parts.append("【복용약 식약처 확인 정보】")
+        for name, result in med_api_info:
+            if result:
+                efcy = result.get('efcy', '')
+                use_method = result.get('use_method', '')
+                info = efcy if efcy and efcy != '관련 정보 없음' else use_method
+                if info and info != '관련 정보 없음':
+                    med_context_parts.append(f"- {result.get('item_name', name)}: {info[:150]}")
+                else:
+                    # API 정보 없으면 KNOWN_MEDS 사전 사용
+                    matched = next((desc for key, desc in KNOWN_MEDS.items() if key in name), None)
+                    med_context_parts.append(f"- {name}: {matched if matched else '복용 목적은 처방의에게 확인하세요.'}")
+            else:
+                matched = next((desc for key, desc in KNOWN_MEDS.items() if key in name), None)
+                med_context_parts.append(f"- {name}: {matched if matched else '복용 목적은 처방의에게 확인하세요.'}")
+
+    system_prompt = """의료 정보 분석 AI입니다. 간결하게 답변하세요.
+각 항목은 1줄 이내로, ①②③ 기호를 사용하세요.
+복용약 분석 시 반드시 【복용약 식약처 확인 정보】에 나온 내용만 사용하세요. 없는 내용은 만들지 마세요."""
 
     age_str = f"{request.age}세" if request.age and request.age > 0 else "정보 없음"
     diseases_str = request.diseases if request.diseases else "정보 없음"
     medications_str = request.medications if request.medications else "정보 없음"
 
-    user_prompt = f"""나이: {age_str} / 기저질환: {diseases_str} / 복용약: {medications_str}
+    med_context = "\n".join(med_context_parts) if med_context_parts else ""
+
+    user_prompt = f"""{med_context}
+
+나이: {age_str} / 기저질환: {diseases_str} / 복용약: {medications_str}
 
 반드시 아래 4개 항목 타이틀을 그대로 쓰고, 각 내용을 작성하세요.
 단, "정보 없음"인 항목은 "입력된 정보가 없습니다."로 간단히 표시하세요:
@@ -715,7 +865,7 @@ async def analyze_profile(request: AnalyzeProfileRequest):
 (각 질환 1줄씩)
 
 2. 복용약 분석:
-(각 약 1줄씩)
+(각 약 1줄씩 — 반드시 위 식약처 정보 기반으로)
 
 3. 건강 주의사항:
 ①②③ 각 1줄

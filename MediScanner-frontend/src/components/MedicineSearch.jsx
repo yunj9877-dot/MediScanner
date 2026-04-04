@@ -3,6 +3,7 @@ import { useState, useRef } from 'react'
 export default function MedicineSearch({ apiUrl, query, setQuery, result, setResult, searched, setSearched }) {
   const [localQuery, setLocalQuery] = useState(query || '')
   const [loading, setLoading] = useState(false)
+  const [searchCompleted, setSearchCompleted] = useState(false)
   const [expandedSections, setExpandedSections] = useState({})
   const [speakingKey, setSpeakingKey] = useState(null)
   const synthRef = useRef(window.speechSynthesis)
@@ -12,6 +13,7 @@ export default function MedicineSearch({ apiUrl, query, setQuery, result, setRes
     setQuery(localQuery)
     setLoading(true)
     setSearched(true)
+    setSearchCompleted(false)
     setExpandedSections({})
     synthRef.current.cancel()
     setSpeakingKey(null)
@@ -25,7 +27,7 @@ export default function MedicineSearch({ apiUrl, query, setQuery, result, setRes
       const data = await res.json()
       setResult(data)
     } catch (err) { setResult(null) }
-    finally { setLoading(false) }
+    finally { setLoading(false); setSearchCompleted(true) }
   }
 
   const toggleSection = (key) => {
@@ -153,7 +155,7 @@ export default function MedicineSearch({ apiUrl, query, setQuery, result, setRes
               )
             })}
           </div>
-        ) : searched && !loading ? (
+        ) : searchCompleted && !hasResult ? (
           <div className="flex flex-col items-center py-8 px-4">
             <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#FFF8E0', border: '1px solid #E0D0A0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, marginBottom: 12 }}>🔍</div>
             <p style={{ fontSize: 16, color: '#5A3E00', fontWeight: 700, marginBottom: 6 }}>검색 결과를 찾지 못했습니다</p>

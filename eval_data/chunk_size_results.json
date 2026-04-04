@@ -1,0 +1,32 @@
+{
+  "results": [
+    {
+      "chunk_size": 300,
+      "num_chunks": 113405,
+      "hit_rate": 68.4,
+      "hits": 342,
+      "total": 500,
+      "embed_time": 4530.0,
+      "eval_time": 451.7
+    },
+    {
+      "chunk_size": 500,
+      "num_chunks": 65383,
+      "hit_rate": 68.2,
+      "hits": 341,
+      "total": 500,
+      "embed_time": 2361.1,
+      "eval_time": 285.2
+    },
+    {
+      "chunk_size": 800,
+      "num_chunks": 41449,
+      "hit_rate": 70.8,
+      "hits": 354,
+      "total": 500,
+      "embed_time": 1494.7,
+      "eval_time": 208.5
+    }
+  ],
+  "best_chunk_size": 800
+}

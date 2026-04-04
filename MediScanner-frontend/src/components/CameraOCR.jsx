@@ -69,7 +69,7 @@ export default function CameraOCR({ apiUrl, image, setImage, preview, setPreview
     <div className="flex flex-col h-full overflow-y-auto px-4 py-4" style={{ background: 'linear-gradient(180deg, #FFFDF5, #FFF9EA)' }}>
       <div className="text-center mb-3">
         <p style={{ fontSize: 16, color: '#2A1D08', fontWeight: 700 }}>약 성분표 / 처방전 스캔</p>
-        <p style={{ fontSize: 13, color: '#A89060', marginTop: 4, fontWeight: 500 }}>약봉투, 처방전, 성분표를 촬영하면 어떤 약인지 분석해드려요</p>
+        <p style={{ fontSize: 13, color: '#A89060', marginTop: 4, fontWeight: 500 }}>약봉투·처방전·성분표를 촬영하면 어떤 약인지 분석해드려요</p>
       </div>
 
       <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleCapture} className="hidden" />
@@ -120,12 +120,30 @@ export default function CameraOCR({ apiUrl, image, setImage, preview, setPreview
 
           {result.drug_names && result.drug_names.length > 0 && (
             <div className="mb-3">
-              <p style={{ fontSize: 14, color: '#5A3E00', fontWeight: 700 }}>복용중인 약</p>
+              <p style={{ fontSize: 14, color: '#5A3E00', fontWeight: 700 }}>인식된 약</p>
               <div className="flex flex-wrap gap-1.5 mt-1.5">
-                {result.drug_names.map((name, i) => (
-                  <span key={i} className="px-3 py-1.5 rounded-full font-bold"
-                    style={{ fontSize: 13, background: 'linear-gradient(135deg, #FFD700, #DAA520)', color: '#1A1206' }}>{name}</span>
-                ))}
+                {result.drug_names.map((name, i) => {
+                  const ENG_TO_KOR = {
+                    'momet nasal spray': '모메트 나잘 스프레이',
+                    'mometasone': '모메타손',
+                    'godex': '고덱스',
+                    'nasonex': '나조넥스',
+                    'flonase': '플로나제',
+                    'tylenol': '타이레놀',
+                    'advil': '애드빌',
+                    'aspirin': '아스피린',
+                    'ibuprofen': '이부프로펜',
+                    'amoxicillin': '아목시실린',
+                    'metformin': '메트포르민',
+                  }
+                  const lower = name.toLowerCase().trim()
+                  const translated = Object.entries(ENG_TO_KOR).find(([eng]) => lower.includes(eng))
+                  const displayName = translated ? translated[1] : name
+                  return (
+                  <span key={i} className="px-2 py-1 rounded-full font-bold"
+                    style={{ fontSize: 15, background: '#FFF0F5', color: '#880E4F', border: '2px solid #880E4F', fontWeight: 800 }}>{displayName}</span>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -143,7 +161,20 @@ export default function CameraOCR({ apiUrl, image, setImage, preview, setPreview
             </button>
           </div>
           <div style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-            {result.analysis && result.analysis.split('\n').map((line, i) => {
+            {result.analysis && (() => {
+              const REPLACE_MAP = {
+                'GODex': '고덱스', 'Godex': '고덱스', 'godex': '고덱스',
+                'Momet Nasal spray': '모메트 나잘 스프레이', 'Momet Nasal Spray': '모메트 나잘 스프레이',
+                'Mometasone': '모메타손', 'mometasone': '모메타손',
+                'Tylenol': '타이레놀', 'tylenol': '타이레놀',
+                'Advil': '애드빌', 'Ibuprofen': '이부프로펜',
+                'Aspirin': '아스피린', 'Metformin': '메트포르민',
+              }
+              let text = result.analysis
+              Object.entries(REPLACE_MAP).forEach(([eng, kor]) => {
+                text = text.replaceAll(eng, kor)
+              })
+              return text.split('\n').filter(line => !line.startsWith('###약이름:')).map((line, i) => {
               const isDanger = /주의|경고|위험|금지|복용금지|병용금기|즉시\s*병원|즉시\s*내원|부작용|알레르기|중단|과다|심각|⚠️|❌|상호작용/.test(line)
               const isHeader = /^###|^\*\*\*|^##/.test(line.trim())
               const cleanLine = line.replace(/\*\*/g, '')
@@ -160,7 +191,8 @@ export default function CameraOCR({ apiUrl, image, setImage, preview, setPreview
                   {cleanLine}
                 </p>
               )
-            })}
+            })
+            })()}
           </div>
 
           {result.profile_warning && (
@@ -171,6 +203,15 @@ export default function CameraOCR({ apiUrl, image, setImage, preview, setPreview
           )}
 
           <p className="mt-3" style={{ fontSize: 11, color: '#C4A860' }}>※ 참고용 정보이며, 정확한 진단은 의료 전문가와 상담하세요.</p>
+          {result.drug_source && (
+            <div className="mt-2 flex items-center gap-1.5">
+              <span style={{ fontSize: 11, color: '#A89060', fontWeight: 600 }}>출처</span>
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 8,
+                background: '#FFF8E0', color: '#8B6914', border: '1px solid #E0D0A0'
+              }}>식약처 {result.drug_source}</span>
+            </div>
+          )}
         </div>
       )}
 

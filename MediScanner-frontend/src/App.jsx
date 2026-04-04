@@ -31,6 +31,7 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState([])
   const [chatInitialized, setChatInitialized] = useState(false)
   const [answerMode, setAnswerMode] = useState('simple')
+  const [selectedModel, setSelectedModel] = useState('e5-large')
 
   // 카메라 탭 상태 유지
   const [cameraImage, setCameraImage] = useState(null)
@@ -130,7 +131,7 @@ export default function App() {
           <p style={{ fontSize: 16, color: '#8B6914', fontWeight: 600, letterSpacing: 4, marginTop: 2 }}>MEDISCANNER</p>
           <div style={{ width: 100, height: 2, background: 'linear-gradient(90deg, transparent, #B8860B, transparent)', borderRadius: 2, marginTop: 10 }} />
           <p style={{ fontSize: 15, color: '#5A3E00', marginTop: 14, fontWeight: 600 }}>이용해 주셔서 감사합니다</p>
-          <p style={{ fontSize: 13, color: '#5A3E00', marginTop: 6, fontWeight: 500 }}><span style={{ fontSize: 18 }}>☑</span> 모든 개인정보가 안전하게 삭제되었습니다</p>
+          <p style={{ fontSize: 14, color: '#7A1A1A', marginTop: 6, fontWeight: 700 }}><span style={{ fontSize: 18 }}>☑</span> 모든 개인정보가 안전하게 삭제되었습니다</p>
           <button onClick={() => setScreen('splash')} className="mt-8"
             style={{ padding: '12px 40px', background: 'linear-gradient(135deg, #5A3E00, #7A5A10, #5A3E00)', borderRadius: 28, border: '1px solid rgba(90,62,0,0.3)', color: '#FFF8E0', fontSize: 15, fontWeight: 700, cursor: 'pointer', letterSpacing: 2 }}>
             다시 시작하기
@@ -223,17 +224,26 @@ export default function App() {
         )}
 
         {/* 4탭 */}
-        <div className="flex shrink-0" style={{ background: 'linear-gradient(180deg, #FFF8E0, #FFFDF5)', borderBottom: '2px solid #D4B860' }}>
+        <div className="flex shrink-0" style={{ background: '#FFF8E0', borderBottom: '1.5px solid #D4B860' }}>
           {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className="flex-1 text-center py-3"
-              style={{ fontSize: 15, fontWeight: activeTab === tab.id ? 800 : 500, color: activeTab === tab.id ? '#5A3E00' : '#AAA', borderBottom: activeTab === tab.id ? '3px solid #B8860B' : '3px solid transparent' }}>
-              <span style={{ fontSize: 17 }}>{tab.icon}</span> {tab.label}
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className="flex-1 text-center"
+              style={{
+                fontSize: 12, fontWeight: activeTab === tab.id ? 800 : 500,
+                color: activeTab === tab.id ? '#5A3E00' : '#B0A080',
+                background: activeTab === tab.id ? 'linear-gradient(180deg, #FFE566, #FFD700)' : 'transparent',
+                borderBottom: activeTab === tab.id ? '3px solid #B8860B' : '3px solid transparent',
+                borderRight: '1px solid #EDE0B0',
+                transition: 'all 0.15s',
+                padding: '2px 0',
+              }}>
+              <div style={{ fontSize: 20 }}>{tab.icon}</div>
+              <div style={{ marginTop: 1 }}>{tab.label}</div>
             </button>
           ))}
         </div>
 
         <div className="flex-1 overflow-hidden">
-          {activeTab === 'chat' && <ChatWindow apiUrl={API_URL} sessionId={SESSION_ID} messages={chatMessages} setMessages={setChatMessages} initialized={chatInitialized} setInitialized={setChatInitialized} answerMode={answerMode} setAnswerMode={setAnswerMode} />}
+          {activeTab === 'chat' && <ChatWindow apiUrl={API_URL} sessionId={SESSION_ID} messages={chatMessages} setMessages={setChatMessages} initialized={chatInitialized} setInitialized={setChatInitialized} answerMode={answerMode} setAnswerMode={setAnswerMode} selectedModel={selectedModel} setSelectedModel={setSelectedModel} />}
           {activeTab === 'camera' && <CameraOCR apiUrl={API_URL} image={cameraImage} setImage={setCameraImage} preview={cameraPreview} setPreview={setCameraPreview} result={cameraResult} setResult={setCameraResult} />}
           {activeTab === 'medicine' && <MedicineSearch apiUrl={API_URL} query={medicineQuery} setQuery={setMedicineQuery} result={medicineResult} setResult={setMedicineResult} searched={medicineSearched} setSearched={setMedicineSearched} />}
           {activeTab === 'profile' && <MyProfile apiUrl={API_URL} sessionId={SESSION_ID} analysisResult={analysisResult} setAnalysisResult={setAnalysisResult} analysisLoading={analysisLoading} setAnalysisLoading={setAnalysisLoading} />}

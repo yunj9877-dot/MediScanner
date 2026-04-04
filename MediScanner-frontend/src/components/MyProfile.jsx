@@ -15,14 +15,16 @@ export default function MyProfile({ apiUrl, sessionId, analysisResult, setAnalys
   const [medications, setMedications] = useState('')
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
+  const [profileLoading, setProfileLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [ocrLoading, setOcrLoading] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
-  const fileInputRef = useRef(null)
+  const recognitionRef = useRef(null)
 
   useEffect(() => { loadProfile(); loadHistory() }, [])
 
   const loadProfile = async () => {
+    setProfileLoading(true)
     try {
       const res = await fetch(`${apiUrl}/api/profile/${sessionId}`)
       const data = await res.json()
@@ -40,6 +42,7 @@ export default function MyProfile({ apiUrl, sessionId, analysisResult, setAnalys
         }
       }
     } catch (e) {}
+    setProfileLoading(false)
   }
 
   const loadHistory = async () => {
@@ -65,6 +68,29 @@ export default function MyProfile({ apiUrl, sessionId, analysisResult, setAnalys
     setShowCustomInput(false)
   }
 
+  const handleVoiceMed = () => {
+    if (isListening) {
+      recognitionRef.current?.stop()
+      setIsListening(false)
+      return
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) { alert('이 브라우저는 음성 인식을 지원하지 않습니다.'); return }
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'ko-KR'
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.onstart = () => setIsListening(true)
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript.replace(/[.。]/g, '').trim()
+      setMedications(prev => prev ? `${prev}, ${transcript}` : transcript)
+    }
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+    recognitionRef.current = recognition
+    recognition.start()
+  }
+
   const handleMedOCR = (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -73,15 +99,15 @@ export default function MyProfile({ apiUrl, sessionId, analysisResult, setAnalys
     reader.onload = async (ev) => {
       const base64 = ev.target.result.split(',')[1]
       try {
-        const res = await fetch(`${apiUrl}/api/camera/medications`, {
+        const res = await fetch(`${apiUrl}/api/camera/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image_base64: base64 }),
+          body: JSON.stringify({ image_base64: base64, user_id: 'default' }),
         })
         const data = await res.json()
-        if (data.medications) {
+        if (data.drug_names && data.drug_names.length > 0) {
           const existing = medications.trim()
-          const newMeds = existing ? `${existing}, ${data.medications}` : data.medications
+          const newMeds = existing ? `${existing}, ${data.drug_names.join(', ')}` : data.drug_names.join(', ')
           setMedications(newMeds)
         }
       } catch (err) {}
@@ -170,7 +196,18 @@ export default function MyProfile({ apiUrl, sessionId, analysisResult, setAnalys
         </div>
 
         {!editing ? (
-          profile ? (
+          profileLoading ? (
+            <div className="flex justify-center items-center py-3">
+              <div style={{
+                width: 28, height: 28,
+                border: '3px solid #E0D0A0',
+                borderTop: '3px solid #DAA520',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+              }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+            </div>
+          ) : profile ? (
             <div className="flex flex-col gap-2">
               <div className="flex justify-between items-center">
                 <span style={{ fontSize: 14, color: '#5A3E00', fontWeight: 500 }}>나이</span>
@@ -178,12 +215,28 @@ export default function MyProfile({ apiUrl, sessionId, analysisResult, setAnalys
               </div>
               <div className="flex justify-between items-center">
                 <span style={{ fontSize: 14, color: '#5A3E00', fontWeight: 500 }}>기저질환</span>
-                <span style={{ fontSize: 14, color: '#2A1D08', fontWeight: 600, textAlign: 'right', maxWidth: '60%' }}>{profile.diseases || '없음'}</span>
+                <span style={{ fontSize: 14, color: '#2A1D08', fontWeight: 600, textAlign: 'right', maxWidth: '60%', wordBreak: 'keep-all', overflowWrap: 'break-word' }}>{profile.diseases || '없음'}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span style={{ fontSize: 14, color: '#5A3E00', fontWeight: 500 }}>복용약</span>
-                <span style={{ fontSize: 14, color: '#2A1D08', fontWeight: 600, textAlign: 'right', maxWidth: '60%' }}>{profile.medications || '없음'}</span>
+                <span style={{ fontSize: 14, color: '#2A1D08', fontWeight: 600, textAlign: 'right', maxWidth: '65%' }}>
+                  {profile.medications
+                    ? profile.medications.split(',').map((m, i, arr) => (
+                        <span key={i} style={{ whiteSpace: 'nowrap' }}>{m.trim()}{i < arr.length - 1 ? ', ' : ''}</span>
+                      ))
+                    : '없음'}
+                </span>
               </div>
+            </div>
+          ) : analysisLoading ? (
+            <div className="flex justify-center items-center py-3">
+              <div style={{
+                width: 28, height: 28,
+                border: '3px solid #E0D0A0',
+                borderTop: '3px solid #DAA520',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+              }} />
             </div>
           ) : (
             <p style={{ fontSize: 14, color: '#A89060', fontWeight: 500 }}>등록된 프로필이 없습니다.</p>
@@ -204,9 +257,9 @@ export default function MyProfile({ apiUrl, sessionId, analysisResult, setAnalys
                     className="px-3 py-1.5 rounded-full font-medium"
                     style={{
                       fontSize: 13,
-                      background: selectedDiseases.includes(disease) ? 'linear-gradient(135deg, #FFD700, #DAA520)' : '#FFF8E0',
-                      color: selectedDiseases.includes(disease) ? '#1A1206' : '#8B7A50',
-                      border: selectedDiseases.includes(disease) ? '1px solid #DAA520' : '1px solid #E0D0A0',
+                      background: selectedDiseases.includes(disease) ? 'linear-gradient(135deg, #C96010, #A04000)' : '#FFF8E0',
+                      color: selectedDiseases.includes(disease) ? '#FFFFFF' : '#8B7A50',
+                      border: selectedDiseases.includes(disease) ? '1px solid #A04000' : '1px solid #E0D0A0',
                     }}>
                     {selectedDiseases.includes(disease) ? '✓ ' : ''}{disease}
                   </button>
@@ -214,7 +267,7 @@ export default function MyProfile({ apiUrl, sessionId, analysisResult, setAnalys
                 {customDiseases.map(disease => (
                   <button key={disease} onClick={() => toggleDisease(disease)}
                     className="px-3 py-1.5 rounded-full font-medium"
-                    style={{ fontSize: 13, background: 'linear-gradient(135deg, #FFD700, #DAA520)', color: '#1A1206', border: '1px solid #DAA520' }}>
+                    style={{ fontSize: 13, background: 'linear-gradient(135deg, #C96010, #A04000)', color: '#FFFFFF', border: '1px solid #A04000' }}>
                     ✓ {disease}
                   </button>
                 ))}
@@ -248,9 +301,21 @@ export default function MyProfile({ apiUrl, sessionId, analysisResult, setAnalys
                 <button onClick={() => fileInputRef.current?.click()} disabled={ocrLoading}
                   className="shrink-0 flex items-center justify-center rounded-lg"
                   style={{ width: 40, height: 40, background: ocrLoading ? '#E0D0A0' : 'linear-gradient(135deg, #FFD700, #DAA520)', border: '1px solid #DAA520' }}>
-                  {ocrLoading ? <span style={{ fontSize: 13 }}>⏳</span> : <span style={{ fontSize: 18 }}>📷</span>}
+                  {ocrLoading ? (
+                    <div style={{ width: 20, height: 20, border: '2.5px solid rgba(90,62,0,0.2)', borderTop: '2.5px solid #5A3E00', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  ) : <span style={{ fontSize: 18 }}>📷</span>}
                 </button>
+                <button onClick={handleVoiceMed}
+                  className="shrink-0 flex items-center justify-center rounded-lg"
+                  style={{ width: 40, height: 40, border: '1px solid #DAA520',
+                    background: isListening ? 'linear-gradient(135deg, #FF6B6B, #CC2222)' : 'linear-gradient(135deg, #FFD700, #DAA520)' }}>
+                  <span style={{ fontSize: 18 }}>{isListening ? '⏹' : '🎤'}</span>
+                </button>
+                <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
               </div>
+              {isListening && (
+                <p style={{ fontSize: 11, color: '#CC2222', fontWeight: 600, marginTop: 4 }}>🎤 듣는 중... 약 이름을 말해주세요</p>
+              )}
               <p className="mt-1" style={{ fontSize: 11, color: '#A89060' }}>처방전/약봉투 촬영으로 자동 인식</p>
             </div>
             <div className="flex gap-2 mt-1">

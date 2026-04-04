@@ -140,7 +140,7 @@ export default function SplashScreen({ onStart }) {
 
         {/* 데이터 기반 문구 */}
         <p style={{ fontSize: 12, color: '#5A3E00', fontWeight: 500, marginTop: 8, opacity: 0.85, textAlign: 'center' }}>
-          AI Hub 의료데이터 164,383건 · 식약처 공공데이터 기반
+          AI Hub 의료데이터 120,774건 · 식약처 공공데이터 기반
         </p>
 
         {/* 시작하기 버튼 */}

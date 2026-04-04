@@ -1,33 +1,71 @@
-# 대용량 데이터 폴더 (로컬에만 유지)
-data/
-raw_data/
-eval_data/
-files/
+﻿# ── 환경변수 ──
+.env
 
-# 캐시 파일
+# ── 모델 파일 ──
+models/
+
+# ── DB / 벡터 인덱스 / 캐시 ──
+data/
+chroma_db*/
+embedding_backup/
+*.bin
+*.pkl
+*.db
+
+# ── 임시 파일 ──
+temp_chunks*
 bm25_cache.pkl
+*_log.txt
+evaluation_results.json
+
+# ── Python 캐시 ──
 __pycache__/
 .pytest_cache/
 *.pyc
+*.pyo
 
-# 환경 변수 (API 키 보안)
-.env
+# ── 백업 파일 ──
+*.backup
+*_backup_*.py
+*_backup_*/
 
-# Node.js
-node_modules/
+# ── 프론트엔드 의존성 ──
+MediScanner-frontend/node_modules/
+MediScanner-frontend/dist/
+MediScanner-frontend/.vite/
 
-# 임시/백업 파일
-*.log
-*.tmp
-*.bak
+# ── 원천 데이터 ──
+raw_data/
 
-# 엑셀 파일 (WBS 등 관리용)
-*.xlsx
+# ── 임시 작업 폴더 ──
+files/
 
-# OS 파일
+# ── 작업용 스크립트 (루트) ──
+embed_*.py
+reembed_*.py
+check_*.py
+verify_embedding.py
+build_hnsw_from_sqlite.py
+flush_hnsw.py
+repair_hnsw.py
+test_hnsw.py
+pre_embedding_check.py
+rebuild_bm25_cache.py
+extract_source.py
+update_config.py
+download_models.py
+evaluate_comprehensive.py
+evaluate_three_models.py
+
+# ── 구버전 문서 ──
+아키텍처_architecture_v2.html
+아키텍처_architecture_v3.html
+"ARCHITECTURE(뉴임베딩).md"
+"ARCHITECTURE_요약(수정요).md"
+MediScanner_WBS_20260324.xlsx
+MediScanner_WBS_v2_20260328.xlsx
+"MediScanner_검색성능_평가보고서.md"
+
+# ── OS ──
 .DS_Store
 Thumbs.db
-
-# IDE
-.vscode/
-.idea/
