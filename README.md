@@ -237,4 +237,4 @@ pytest tests/test_all.py -v
 
 ---
 
-*K-Digital Training 의료AI융합 훈련과정 | 4팀 박윤정 | 2026*
+*K-Digital Training | 2026*
