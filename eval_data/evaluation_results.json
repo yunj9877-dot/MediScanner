@@ -1,0 +1,65 @@
+{
+  "qa_count": 500,
+  "results": {
+    "시맨틱만": {
+      "top_3": {
+        "hit_rate": 65.8,
+        "hits": 329,
+        "total": 500,
+        "elapsed_seconds": 24.9
+      },
+      "top_5": {
+        "hit_rate": 69.4,
+        "hits": 347,
+        "total": 500,
+        "elapsed_seconds": 27.4
+      },
+      "top_10": {
+        "hit_rate": 75.4,
+        "hits": 377,
+        "total": 500,
+        "elapsed_seconds": 22.6
+      }
+    },
+    "RRF (하이브리드)": {
+      "top_3": {
+        "hit_rate": 77.0,
+        "hits": 385,
+        "total": 500,
+        "elapsed_seconds": 6553.8
+      },
+      "top_5": {
+        "hit_rate": 81.2,
+        "hits": 406,
+        "total": 500,
+        "elapsed_seconds": 7461.7
+      },
+      "top_10": {
+        "hit_rate": 84.4,
+        "hits": 422,
+        "total": 500,
+        "elapsed_seconds": 6764.3
+      }
+    },
+    "RRF + Reranker": {
+      "top_3": {
+        "hit_rate": 72.0,
+        "hits": 360,
+        "total": 500,
+        "elapsed_seconds": 11055.7
+      },
+      "top_5": {
+        "hit_rate": 77.4,
+        "hits": 387,
+        "total": 500,
+        "elapsed_seconds": 11556.4
+      },
+      "top_10": {
+        "hit_rate": 83.8,
+        "hits": 419,
+        "total": 500,
+        "elapsed_seconds": 9802.8
+      }
+    }
+  }
+}

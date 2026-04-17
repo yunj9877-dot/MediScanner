@@ -20,6 +20,8 @@ export default function MyProfile({ apiUrl, sessionId, analysisResult, setAnalys
   const [ocrLoading, setOcrLoading] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const recognitionRef = useRef(null)
+  const fileInputRef = useRef(null)        // 약봉투 OCR 파일 input용
+  const [isListening, setIsListening] = useState(false)  // 음성인식 상태
 
   useEffect(() => { loadProfile(); loadHistory() }, [])
 

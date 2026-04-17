@@ -109,11 +109,17 @@ MediScanner/
 │       └── components/
 ├── tests/                      # TDD 테스트
 │   └── test_all.py             # 58개 테스트 100% 통과
+├── scripts/                    # 평가 스크립트
+│   ├── evaluate_e5small.py
+│   ├── evaluate_200_questions_v3.py
+│   ├── build_hnsw_from_sqlite.py
+│   ├── build_vectordb.py
+│   ├── compare_search_methods.py
+│   ├── evaluate_chunk_size.py
+│   ├── evaluate_hard_questions.py
+│   └── evaluate_three_models.py
 ├── results/                    # 성능 평가 결과 CSV
 ├── eval_data/                  # 평가 데이터
-├── scripts/                    # 평가 스크립트
-├── evaluate_e5small.py
-├── evaluate_200_questions_v3.py
 ├── main_rest_api.py            # FastAPI 진입점 (포트 8001)
 ├── requirements.txt
 └── start.bat                   # 백엔드 + 프론트엔드 동시 실행

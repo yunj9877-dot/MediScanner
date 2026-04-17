@@ -64,18 +64,25 @@ class OpenAIClient:
 
                 if disease_list:
                     circles = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧']
-                    profile_lines.append("답변은 반드시 아래 형식으로 기저질환별로 나누어 작성하세요:")
-                    for i, disease in enumerate(disease_list):
-                        c = circles[i] if i < len(circles) else f"({i+1})"
-                        profile_lines.append(f"{c} {disease}: [질문 내용이 {disease}에 미치는 영향을 1~2문장으로]")
+                    if len(disease_list) == 1:
+                        # 기저질환 1개: 항목 형식 강요 안 함
+                        profile_lines.append(f"기저질환 '{disease_list[0]}'에 미치는 영향을 중심으로 답변하세요.")
+                        profile_lines.append(f"⚠️ 절대로 {disease_list[0]} 외의 다른 질환(당뇨병, 고지혈증 등)을 임의로 추가하지 마세요.")
+                    else:
+                        profile_lines.append("답변은 반드시 아래 형식으로 기저질환별로 나누어 작성하세요:")
+                        for i, disease in enumerate(disease_list):
+                            c = circles[i] if i < len(circles) else f"({i+1})"
+                            profile_lines.append(f"{c} {disease}: [질문 내용이 {disease}에 미치는 영향을 1~2문장으로]")
+                        profile_lines.append(f"⚠️ 위 {len(disease_list)}개 기저질환 외에 다른 질환을 임의로 추가하지 마세요.")
                     if medications:
                         profile_lines.append(f"💊 복용약 주의: [복용 중인 {medications}와의 상호작용]")
                     profile_lines.append("※ 참고용 정보입니다. 정확한 진단은 의료 전문가와 상담하세요.")
 
                 profile_lines.append("\n【추가 규칙】")
-                profile_lines.append(f"- 기저질환 {len(disease_list)}개를 반드시 모두 개별 항목으로 작성하세요. 하나라도 빠지면 안 됩니다.")
+                if len(disease_list) > 1:
+                    profile_lines.append(f"- 기저질환 {len(disease_list)}개를 반드시 모두 개별 항목으로 작성하세요. 하나라도 빠지면 안 됩니다.")
+                profile_lines.append(f"- 등록된 기저질환: {', '.join(disease_list)} — 이 외의 질환은 절대 언급하지 마세요.")
                 profile_lines.append("- '일반적으로는...' 표현 절대 금지.")
-                profile_lines.append("- 간단 모드여도 각 기저질환 항목은 모두 포함하되 각 1~2문장으로 간결하게.")
                 profile_lines.append("- 위험한 내용은 ⚠️로 강조하세요.")
 
                 prompt_parts.append("\n".join(profile_lines))
@@ -134,10 +141,14 @@ class OpenAIClient:
         format_instruction = ""
         if disease_list:
             circles = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧']
-            lines = ["【반드시 아래 형식으로 답변하세요】"]
-            for i, disease in enumerate(disease_list):
-                c = circles[i] if i < len(circles) else f"({i+1})"
-                lines.append(f"{c} {disease}: (이 질환에 미치는 영향 1~2문장)")
+            lines = [f"【등록된 기저질환: {', '.join(disease_list)} — 이 외 질환 언급 금지】"]
+            if len(disease_list) == 1:
+                lines.append(f"기저질환 '{disease_list[0]}'에 집중하여 답변하세요.")
+            else:
+                lines.append("【반드시 아래 형식으로 답변하세요】")
+                for i, disease in enumerate(disease_list):
+                    c = circles[i] if i < len(circles) else f"({i+1})"
+                    lines.append(f"{c} {disease}: (이 질환에 미치는 영향 1~2문장)")
             if user_profile.get("medications"):
                 lines.append(f"💊 복용약 주의: (복용 중인 {user_profile['medications']}와의 관계)")
             format_instruction = "\n" + "\n".join(lines) + "\n"

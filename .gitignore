@@ -1,5 +1,10 @@
-﻿# ── 환경변수 ──
+# ── 환경변수 ──
 .env
+
+# ── 가상환경 ──
+venv/
+.venv/
+env/
 
 # ── 모델 파일 ──
 models/
@@ -14,9 +19,8 @@ embedding_backup/
 
 # ── 임시 파일 ──
 temp_chunks*
-bm25_cache.pkl
 *_log.txt
-evaluation_results.json
+*.log
 
 # ── Python 캐시 ──
 __pycache__/
@@ -40,12 +44,14 @@ raw_data/
 # ── 임시 작업 폴더 ──
 files/
 
+# ── HuggingFace 배포 폴더 (대용량) ──
+mediscanner-hf/
+
 # ── 작업용 스크립트 (루트) ──
 embed_*.py
 reembed_*.py
 check_*.py
 verify_embedding.py
-build_hnsw_from_sqlite.py
 flush_hnsw.py
 repair_hnsw.py
 test_hnsw.py
@@ -55,16 +61,23 @@ extract_source.py
 update_config.py
 download_models.py
 evaluate_comprehensive.py
-evaluate_three_models.py
+evaluate_search_strategies*.py
+
+# ── 구버전 스크립트 (scripts 폴더) ──
+scripts/evaluate_accuracy.py
 
 # ── 구버전 문서 ──
 아키텍처_architecture_v2.html
 아키텍처_architecture_v3.html
-"ARCHITECTURE(뉴임베딩).md"
-"ARCHITECTURE_요약(수정요).md"
+ARCHITECTURE(뉴임베딩).md
+ARCHITECTURE_요약(수정요).md
 MediScanner_WBS_20260324.xlsx
 MediScanner_WBS_v2_20260328.xlsx
-"MediScanner_검색성능_평가보고서.md"
+MediScanner_검색성능_평가보고서.md
+embedding_log.txt
+embed_e5small_log.txt
+reembed_all_models_log.txt
+reembed_v2_log.txt
 
 # ── OS ──
 .DS_Store

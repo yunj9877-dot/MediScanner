@@ -1,0 +1,82 @@
+{
+  "e5_basic_100": {
+    "semantic": {
+      "top3": 98.0,
+      "top5": 100.0,
+      "top10": 100.0
+    },
+    "bm25": {
+      "top3": 92.0,
+      "top5": 99.0,
+      "top10": 100.0
+    },
+    "rrf": {
+      "top3": 99.0,
+      "top5": 100.0,
+      "top10": 100.0
+    },
+    "model": "E5-large",
+    "level": "기본",
+    "count": 100
+  },
+  "e5_hard_100": {
+    "semantic": {
+      "top3": 86.0,
+      "top5": 89.0,
+      "top10": 94.0
+    },
+    "bm25": {
+      "top3": 78.0,
+      "top5": 85.0,
+      "top10": 94.0
+    },
+    "rrf": {
+      "top3": 95.0,
+      "top5": 99.0,
+      "top10": 100.0
+    },
+    "model": "E5-large",
+    "level": "어려운",
+    "count": 100
+  },
+  "e5_all_200": {
+    "semantic": {
+      "top3": 92.0,
+      "top5": 94.5,
+      "top10": 97.0
+    },
+    "bm25": {
+      "top3": 85.0,
+      "top5": 92.0,
+      "top10": 97.0
+    },
+    "rrf": {
+      "top3": 97.0,
+      "top5": 99.5,
+      "top10": 100.0
+    },
+    "model": "E5-large",
+    "level": "전체",
+    "count": 200
+  },
+  "kosroberta_hard_100": {
+    "model": "ko-sroberta*",
+    "level": "어려운*",
+    "count": 100,
+    "semantic": {
+      "top3": 60.0,
+      "top5": 65.8,
+      "top10": 72.0
+    },
+    "bm25": {
+      "top3": 45.0,
+      "top5": 55.0,
+      "top10": 68.0
+    },
+    "rrf": {
+      "top3": 68.0,
+      "top5": 81.2,
+      "top10": 85.0
+    }
+  }
+}

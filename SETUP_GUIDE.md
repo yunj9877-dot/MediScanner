@@ -1,111 +1,154 @@
-# 닥터가디언 - ChromaDB 파이프라인 실행 가이드
+# MediScanner - 설치 및 실행 가이드
 
-## 📁 폴더 구조 만들기
+## 📋 시스템 요구사항
 
-VS Code에서 프로젝트 폴더를 이렇게 만드세요:
+- Python 3.10 이상
+- Node.js 18 이상
+- RAM 8GB 이상 권장
+- 디스크 여유 공간 5GB 이상 (데이터 파일 포함)
+
+---
+
+## 📁 프로젝트 구조
 
 ```
-doctor-guardians/
-├── scripts/
-│   └── build_vectordb.py       ← 이 파일 (파이프라인 스크립트)
-├── data/
-│   └── chroma_db/              ← 자동 생성됨 (벡터DB)
-├── raw_data/
-│   └── 필수의료/               ← AI Hub에서 받은 JSON 파일 전부 여기에
-│       ├── TS_국문_기타/
-│       ├── TS_국문_의학_교과서/
-│       ├── TS_국문_학술_논문_및_저널/
-│       ├── TS_국문_학회_가이드라인/
-│       └── (나머지 ZIP 풀어서 넣기)
+MediScanner/
+├── app/                        ← FastAPI 백엔드 (Clean Architecture)
+│   ├── core/                   ← 설정, 의존성 주입
+│   ├── domain/                 ← 도메인 모델
+│   ├── infrastructure/         ← DB, 검색 엔진 구현체
+│   └── interfaces/             ← API 라우터
+├── MediScanner-frontend/       ← React + Vite + Tailwind CSS
+├── data/                       ← ChromaDB (메타데이터 전용)
+├── eval_data/                  ← 평가 질문셋
+├── results/                    ← 검색 성능 평가 결과
+├── scripts/                    ← 평가 스크립트
+├── tests/                      ← TDD 테스트 (58개)
+├── hnsw_index.bin              ← hnswlib 벡터 인덱스 (별도 보관)
+├── hnsw_ids.json               ← HNSW ID 매핑
+├── temp_chunks_source_only.pkl ← 청크 텍스트 조회용 (별도 보관)
+├── bm25_cache_e5small.pkl      ← BM25 인덱스 캐시 (별도 보관)
+├── main_rest_api.py            ← FastAPI 앱 진입점
 ├── requirements.txt
-└── .env                        ← 나중에 OpenAI API 키 저장
+├── start.bat                   ← 백엔드 실행 스크립트 (Windows)
+└── .env                        ← API 키 설정
 ```
 
-### raw_data 폴더 준비
+---
 
-1. AI Hub에서 받은 ZIP 파일들을 `raw_data/필수의료/` 안에 압축 해제
-2. 하위 폴더 구조는 상관없음 — 스크립트가 자동으로 모든 `.json` 파일을 찾음
+## ⚙️ 1단계: 환경 변수 설정
 
+프로젝트 루트에 `.env` 파일을 생성하고 아래 내용을 입력하세요:
 
-## 🔧 설치 (터미널에서)
+```env
+OPENAI_API_KEY=sk-...
+```
+
+---
+
+## 🔧 2단계: 백엔드 설치
 
 ```bash
-# 1. 프로젝트 폴더로 이동
-cd doctor-guardians
+# 프로젝트 폴더로 이동
+cd MediScanner
 
-# 2. 가상환경 만들기 (권장)
-python -m venv venv
-venv\Scripts\activate          # Windows
-# source venv/bin/activate     # Mac/Linux
-
-# 3. 패키지 설치
-pip install chromadb sentence-transformers
+# 패키지 설치
+pip install -r requirements.txt
 ```
 
-> 첫 실행 시 임베딩 모델(약 500MB)이 자동 다운로드됩니다.
+> ⚠️ chromadb는 반드시 **0.4.24** 버전이어야 합니다. 다른 버전 설치 시 동작하지 않습니다.
 
+---
 
-## ▶️ 실행
+## 🗂️ 3단계: 데이터 파일 배치
+
+아래 파일들은 용량이 커서 별도 보관됩니다. 실행 전 프로젝트 루트에 복사해주세요:
+
+| 파일명 | 설명 | 위치 |
+|--------|------|------|
+| `hnsw_index.bin` | hnswlib 벡터 인덱스 (676,570 청크) | 루트 |
+| `hnsw_ids.json` | HNSW ID ↔ 청크 ID 매핑 | 루트 |
+| `temp_chunks_source_only.pkl` | 청크 텍스트 조회 딕셔너리 | 루트 |
+| `bm25_cache_e5small.pkl` | BM25 인덱스 캐시 | 루트 |
+
+---
+
+## ▶️ 4단계: 백엔드 실행
+
+### Windows
+```bash
+start.bat
+```
+
+### 직접 실행
+```bash
+uvicorn main_rest_api:app --host 0.0.0.0 --port 8001 --reload
+```
+
+백엔드 서버: `http://localhost:8001`  
+API 문서: `http://localhost:8001/docs`
+
+---
+
+## 🌐 5단계: 프론트엔드 실행
 
 ```bash
-# ChromaDB 구축 (JSON → 벡터DB 변환)
-python scripts/build_vectordb.py --data_dir ./raw_data/필수의료
+cd MediScanner-frontend
+
+# 최초 실행 시 패키지 설치
+npm install
+
+# 개발 서버 실행
+npm run dev
 ```
 
-실행하면 이런 화면이 나옵니다:
-```
-============================================================
-🏥 닥터가디언 - ChromaDB 벡터DB 구축
-============================================================
+프론트엔드: `http://localhost:5173`
 
-📂 폴더: ./raw_data/필수의료
-📄 JSON 파일 발견: 19,201개
-✅ 로드 완료: 19,201건
+---
 
-✂️ 청킹 중... (chunk_size=500)
-   19,201건 → 약 44,000개 청크
-
-📥 44,000개 청크 저장 시작...
-   [ 10.0%] 4,400/44,000  (60초 경과 | 약 540초 남음)
-   [ 20.0%] 8,800/44,000  (120초 경과 | 약 480초 남음)
-   ...
-
-🔍 테스트 검색 (44,000개 청크)
-❓ 고혈압 치료 방법은?
-   [1] 📌 대한심장학회
-       고혈압 치료의 목표는 혈압을 정상 범위로...
-
-🎉 완료! ChromaDB 위치: ./data/chroma_db
-```
-
-예상 소요 시간: **약 10~30분** (PC 성능에 따라 다름)
-
-
-## 🔍 테스트만 하기
-
-이미 구축한 DB로 검색 테스트만 하려면:
+## 🧪 테스트 실행
 
 ```bash
-python scripts/build_vectordb.py --data_dir ./raw_data/필수의료 --test_only
+# 전체 테스트 (58개)
+pytest tests/ -v
 ```
 
+---
 
-## ⚙️ 임베딩 모델 변경 (A/B 테스트)
+## 🔍 검색 성능 평가
 
-`build_vectordb.py` 파일 상단의 `EMBEDDING_MODEL`을 바꿔서 비교:
-
-```python
-# 옵션 A (기본): 한국어 특화
-EMBEDDING_MODEL = "jhgan/ko-sroberta-multitask"
-
-# 옵션 B: 다국어 대형
-EMBEDDING_MODEL = "intfloat/multilingual-e5-base"
-
-# 옵션 C: 경량 모델
-EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-```
-
-모델을 바꾸면 `--db_path`도 바꿔서 별도 DB로 저장하세요:
 ```bash
-python scripts/build_vectordb.py --data_dir ./raw_data/필수의료 --db_path ./data/chroma_model_b
+# E5-small Hit Rate 평가 (200개 질문)
+python scripts/evaluate_200_questions_v3.py
+
+# 결과는 results/ 폴더에 자동 저장
 ```
+
+---
+
+## 🏗️ 기술 스택
+
+| 구분 | 기술 |
+|------|------|
+| 백엔드 | FastAPI + uvicorn (port 8001) |
+| 프론트엔드 | React + Vite + Tailwind CSS (port 5173) |
+| 임베딩 모델 | multilingual-E5-small (384차원) |
+| 벡터 검색 | hnswlib (직접 knn_query) |
+| 키워드 검색 | BM25 (rank-bm25) |
+| 하이브리드 | RRF (Reciprocal Rank Fusion, k=60) |
+| LLM | GPT-4o-mini |
+| 메타데이터 DB | ChromaDB 0.4.24 |
+| 아키텍처 | Clean Architecture + TDD |
+
+---
+
+## ❓ 자주 묻는 문제
+
+**Q. `hnsw_index.bin` 로드 오류가 발생해요**  
+A. hnswlib는 경로에 한글이 포함된 경우 오류가 발생합니다. 반드시 상대 경로로 접근하도록 설정을 확인하세요.
+
+**Q. chromadb 버전 오류가 발생해요**  
+A. `pip install chromadb==0.4.24` 로 정확한 버전을 설치하세요.
+
+**Q. numpy 관련 오류가 발생해요**  
+A. `pip install "numpy<2.0.0"` 으로 numpy 버전을 낮춰주세요.

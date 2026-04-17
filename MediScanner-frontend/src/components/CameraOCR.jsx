@@ -195,13 +195,6 @@ export default function CameraOCR({ apiUrl, image, setImage, preview, setPreview
             })()}
           </div>
 
-          {result.profile_warning && (
-            <div className="mt-3 p-3 rounded-lg" style={{ background: '#FFF3E0', border: '1px solid #FFB74D' }}>
-              <p style={{ fontSize: 14, color: '#E65100', fontWeight: 700 }}>건강 프로필 기반 주의사항</p>
-              <p className="mt-1" style={{ fontSize: 14, color: '#BF360C', fontWeight: 500, lineHeight: 1.6 }}>{result.profile_warning}</p>
-            </div>
-          )}
-
           <p className="mt-3" style={{ fontSize: 11, color: '#C4A860' }}>※ 참고용 정보이며, 정확한 진단은 의료 전문가와 상담하세요.</p>
           {result.drug_source && (
             <div className="mt-2 flex items-center gap-1.5">
